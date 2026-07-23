@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UltraLED N1217 300 LED Simulator & Code Generator</title>
+  <!-- Google Fonts: Inter and Fira Code -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --panel-bg: rgba(30, 41, 59, 0.7);
+      --border-color: rgba(255, 255, 255, 0.1);
+      --accent-primary: #3b82f6;
+      --accent-secondary: #8b5cf6;
+      --accent-gradient: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --glow-intensity: 15px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    header {
+      padding: 1.5rem 2rem;
+      border-bottom: 1px solid var(--border-color);
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(12px);
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header-title h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: var(--accent-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.25rem;
+    }
+
+    .header-title p {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
+    .badge {
+      background: rgba(139, 92, 246, 0.2);
+      border: 1px solid rgba(139, 92, 246, 0.4);
+      color: #c084fc;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      padding: 1.5rem;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    @media (max-width: 1024px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--panel-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      backdrop-filter: blur(16px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+
+    .full-width-card {
+      grid-column: 1 / -1;
+    }
+
+    .card-header {
+      padding: 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .card-header h2 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-body {
+      padding: 1.25rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    /* Simulation View Customizations */
+    .simulator-container {
+      position: relative;
+      background: #020617;
+      border-radius: 12px;
+      padding: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 120px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .simulator-container::-webkit-scrollbar {
+      height: 8px;
+    }
+    .simulator-container::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 4px;
+    }
+    .simulator-container::-webkit-scrollbar-thumb {
+      background: rgba(59, 130, 246, 0.4);
+      border-radius: 4px;
+    }
+    .simulator-container::-webkit-scrollbar-thumb:hover {
+      background: rgba(59, 130, 246, 0.6);
+    }
+
+    #ledCanvas {
+      background: transparent;
+      cursor: crosshair;
+    }
+
+    .tooltip {
+      position: absolute;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--accent-primary);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      pointer-events: none;
+      display: none;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      white-space: nowrap;
+    }
+
+    /* Controls Styling */
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .control-group label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .control-group input, .control-group select {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.625rem;
+      border-radius: 8px;
+      outline: none;
+      font-family: inherit;
+      font-size: 0.875rem;
+      transition: all 0.2s;
+    }
+
+    .control-group input:focus, .control-group select:focus {
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+    }
+
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .slider-container input[type="range"] {
+      flex: 1;
+      height: 6px;
+      border-radius: 3px;
+      outline: none;
+      background: rgba(255,255,255,0.1);
+      -webkit-appearance: none;
+    }
+
+    .slider-container input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-primary);
+      cursor: pointer;
+      box-shadow: 0 0 8px var(--accent-primary);
+    }
+
+    .slider-value {
+      font-size: 0.875rem;
+      font-weight: 600;
+      min-width: 3rem;
+      text-align: right;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.625rem 1.25rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.875rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-primary {
+      background: var(--accent-gradient);
+      border: none;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    /* Code View Customizations */
+    .code-container {
+      flex: 1;
+      position: relative;
+      border-radius: 12px;
+      background: #020617;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .code-tabs {
+      display: flex;
+      background: rgba(15, 23, 42, 0.9);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .code-tab {
+      padding: 0.75rem 1.25rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border-right: 1px solid var(--border-color);
+      transition: all 0.2s;
+    }
+
+    .code-tab.active {
+      color: var(--text-main);
+      background: #020617;
+      border-bottom: 2px solid var(--accent-primary);
+    }
+
+    .code-scroll {
+      flex: 1;
+      overflow: auto;
+      max-height: 380px;
+    }
+
+    pre {
+      margin: 0;
+      padding: 1.25rem;
+    }
+
+    code {
+      font-family: 'Fira Code', 'Consolas', monospace;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      color: #cbd5e1;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 3.5rem;
+      right: 1rem;
+      background: rgba(30, 41, 59, 0.9);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+      z-index: 5;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+
+    /* Grid Layout Utilities */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    
+    @media (max-width: 640px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Navigation Tabs */
+    .sim-nav-tabs {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+
+    .sim-nav-tab {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      padding: 0.375rem 0.75rem;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      transition: all 0.2s ease-in-out;
+    }
+
+    .sim-nav-tab:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .sim-nav-tab.active {
+      color: var(--text-main);
+      background: var(--accent-gradient);
+      border-color: transparent;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-title">
+      <h1>ESP32-S3 UltraLED N1217 Simulator</h1>
+      <p>Simulate animations for 300 addressable clusters (UCS7604 driver) on 1 pin</p>
+      <div class="sim-nav-tabs">
+        <a href="index.html" class="sim-nav-tab">1200 NeoPixel Simulator</a>
+        <a href="index_ultraled.html" class="sim-nav-tab active">300 UltraLED (FastLED) Simulator</a>
+      </div>
+    </div>
+    <div class="badge">UCS7604 Cluster Array (0-299)</div>
+  </header>
+
+  <main>
+    <!-- Top Full-Width Panel: LED Visualization -->
+    <div class="card full-width-card">
+      <div class="card-header">
+        <h2>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v20M2 12h20"/></svg>
+          Interactive Preview
+        </h2>
+        <div class="control-group" style="flex-direction: row; align-items: center; gap: 0.5rem; margin-bottom: 0;">
+          <label style="margin-bottom: 0;">Layout:</label>
+          <select id="layoutSelect">
+            <option value="line">Single Horizontal Line (4px per Cluster)</option>
+            <option value="matrix">Matrix Grid (30x10)</option>
+            <option value="columns">Folded Strip (2x150 Side-by-Side)</option>
+            <option value="serpentine">Serpentine (30x10)</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body" style="align-items: center; gap: 1rem;">
+        <div class="simulator-container" id="simContainer" style="width: 100%;">
+          <canvas id="ledCanvas" width="1200" height="80"></canvas>
+          <div class="tooltip" id="simTooltip">LED #0</div>
+        </div>
+
+        <div class="button-group" style="width: 100%; justify-content: center;">
+          <button class="btn btn-primary" id="playBtn">
+            <span id="playIcon">⏸</span> <span id="playText">Pause</span>
+          </button>
+          <button class="btn" id="stepBtn" disabled>
+            <span>⏭</span> Step
+          </button>
+          <button class="btn" id="resetBtn">
+            <span>🔄</span> Reset
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Left Panel: Simulator Controls -->
+    <div class="card">
+      <div class="card-header">
+        <h2>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Simulator Controls
+        </h2>
+      </div>
+      <div class="card-body">
+        <div class="control-grid" style="grid-template-columns: 1fr;">
+          <div class="control-group">
+            <label>Selected Animation</label>
+            <select id="animSelect">
+              <option value="redSweep">Red Sweep (Test Script)</option>
+              <option value="rainbowWave">Rainbow Wave</option>
+              <option value="riverFlow">Tidal River Flow (Ebb & Flow)</option>
+              <option value="pulseCyan">Cyan Breathing Pulse</option>
+              <option value="airQuality">Air Quality (Healthy vs Pollution)</option>
+              <option value="sparkles">Starry Night Sparkles</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label>Animation Speed</label>
+            <div class="slider-container">
+              <input type="range" id="speedSlider" min="1" max="100" value="50">
+              <div class="slider-value" id="speedVal">5 ms</div>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label>Global Brightness Limit</label>
+            <div class="slider-container">
+              <input type="range" id="brightSlider" min="10" max="255" value="150">
+              <div class="slider-value" id="brightVal">150 / 255</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="control-group">
+            <label>Strip Data Pin</label>
+            <input type="number" id="pin1Input" value="6" placeholder="Pin">
+          </div>
+
+          <div class="control-group">
+            <label>Strip LED Count (Logical)</label>
+            <input type="number" id="count1Input" value="300" placeholder="LED Count">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Right Panel: Code Generator -->
+    <div class="card">
+      <div class="card-header">
+        <h2>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+          Arduino Code Generator
+        </h2>
+        <span class="badge" style="background: rgba(139, 92, 246, 0.2); border-color: rgba(139, 92, 246, 0.4); color: #c084fc;">Auto-Synced</span>
+      </div>
+      <div class="code-container">
+        <div class="code-tabs">
+          <div class="code-tab active">ultraled_fastled.ino</div>
+        </div>
+        <button class="copy-btn" id="copyBtn">Copy Arduino Code</button>
+        <div class="code-scroll">
+          <pre><code id="codeBlock">Loading generated code...</code></pre>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // --- Canvas & Simulation State ---
+    const canvas = document.getElementById('ledCanvas');
+    const ctx = canvas.getContext('2d');
+    const tooltip = document.getElementById('simTooltip');
+    const simContainer = document.getElementById('simContainer');
+
+    // Configuration elements
+    const pin1Input = document.getElementById('pin1Input');
+    const count1Input = document.getElementById('count1Input');
+    const animSelect = document.getElementById('animSelect');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedVal = document.getElementById('speedVal');
+    const brightSlider = document.getElementById('brightSlider');
+    const brightVal = document.getElementById('brightVal');
+    const layoutSelect = document.getElementById('layoutSelect');
+    const codeBlock = document.getElementById('codeBlock');
+
+    // Control buttons
+    const playBtn = document.getElementById('playBtn');
+    const playIcon = document.getElementById('playIcon');
+    const playText = document.getElementById('playText');
+    const stepBtn = document.getElementById('stepBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const copyBtn = document.getElementById('copyBtn');
+
+    // Engine settings
+    let numLeds1 = parseInt(count1Input.value) || 300;
+    let totalLeds = numLeds1;
+    let pin1 = parseInt(pin1Input.value) || 6;
+    let delayMs = parseInt(speedSlider.value);
+    let brightness = parseInt(brightSlider.value);
+    let selectedLayout = layoutSelect.value;
+    let currentAnim = animSelect.value;
+
+    let isPlaying = true;
+    let tick = 0;
+    let animationFrameId = null;
+    let lastTime = 0;
+
+    // The virtual LED pixel array: stores {r, g, b} objects
+    let virtualLeds = [];
+    function initVirtualLeds() {
+      totalLeds = numLeds1;
+      virtualLeds = Array.from({ length: totalLeds }, () => ({ r: 0, g: 0, b: 0 }));
+    }
+    initVirtualLeds();
+
+    // Map screen coordinates for tooltip (used in grid layouts)
+    let pixelCoords = [];
+
+    // Helper functions
+    function setVirtualPixel(index, r, g, b) {
+      if (index >= 0 && index < totalLeds) {
+        // Apply local brightness scaling to the preview
+        const scale = brightness / 255;
+        virtualLeds[index] = { 
+          r: Math.round(r * scale), 
+          g: Math.round(g * scale), 
+          b: Math.round(b * scale) 
+        };
+      }
+    }
+
+    // Convert Hue/Sat/Val to RGB
+    function hslToRgb(h, s, l) {
+      let r, g, b;
+      if (s === 0) {
+        r = g = b = l; // achromatic
+      } else {
+        const hue2rgb = (p, q, t) => {
+          if (t < 0) t += 1;
+          if (t > 1) t -= 1;
+          if (t < 1/6) return p + (q - p) * 6 * t;
+          if (t < 1/2) return q;
+          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+          return p;
+        };
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+      }
+      return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+    }
+
+    // --- Dynamic Canvas Resizer ---
+    function updateCanvasSize() {
+      if (selectedLayout === 'line') {
+        canvas.width = totalLeds * 4; // exactly 1200px width (4px per LED)
+        canvas.height = 80;
+        simContainer.style.overflowX = 'auto';
+        simContainer.style.justifyContent = 'center'; 
+      } else {
+        canvas.width = 560;
+        canvas.height = 400;
+        simContainer.style.overflowX = 'hidden';
+        simContainer.style.justifyContent = 'center';
+      }
+    }
+
+    // --- Animation Programs ---
+    const animations = {
+      redSweep: {
+        tickScale: 1,
+        run: (t) => {
+          const cycleLength = totalLeds + 100;
+          const cursor = t % cycleLength;
+          for (let i = 0; i < totalLeds; i++) {
+            if (cursor < totalLeds) {
+              if (i <= cursor) {
+                setVirtualPixel(i, 255, 0, 0); // Red
+              } else {
+                setVirtualPixel(i, 0, 0, 0); // Off
+              }
+            } else {
+              setVirtualPixel(i, 255, 0, 0);
+            }
+          }
+        }
+      },
+      rainbowWave: {
+        tickScale: 0.5,
+        run: (t) => {
+          for (let i = 0; i < totalLeds; i++) {
+            const hue = (i * 360 / totalLeds + t * 2) % 360;
+            const rgb = hslToRgb(hue / 360, 1, 0.5);
+            setVirtualPixel(i, rgb.r, rgb.g, rgb.b);
+          }
+        }
+      },
+      riverFlow: {
+        tickScale: 1,
+        run: (t) => {
+          const tidePhase = t * 0.003; 
+          const flowSpeed = Math.sin(tidePhase) * 1.5;
+          const flowPosition = -Math.cos(tidePhase) * 500; 
+          const speedMagnitude = Math.abs(flowSpeed); 
+
+          for (let i = 0; i < totalLeds; i++) {
+            const wave1 = (Math.sin(i * 0.03 - flowPosition) + 1) / 2;
+            const wave2 = (Math.sin(i * 0.08 - flowPosition * 1.3 + Math.PI) + 1) / 2;
+            const riverVal = (wave1 + wave2) / 2; 
+
+            const r = Math.round(riverVal * 120 * speedMagnitude);
+            const g = Math.round(20 + riverVal * 180 * speedMagnitude);
+            const b = Math.round(100 + riverVal * 155);
+
+            setVirtualPixel(i, r, g, b);
+          }
+        }
+      },
+      pulseCyan: {
+        tickScale: 0.01,
+        run: (t) => {
+          const factor = (Math.sin(t) + 1) / 2;
+          const r = 0;
+          const g = Math.round(factor * 180);
+          const b = Math.round(factor * 255);
+          for (let i = 0; i < totalLeds; i++) {
+            setVirtualPixel(i, r, g, b);
+          }
+        }
+      },
+      airQuality: {
+        tickScale: 1,
+        run: (t) => {
+          const baseBreath = (Math.sin(t * 0.01) + 1) / 2;
+
+          for (let i = 0; i < totalLeds; i++) {
+            const spatialGreen = (Math.sin(i * 0.035 + t * 0.005) * Math.cos(i * 0.015) + 1) / 2;
+            const greenGlow = (spatialGreen * 0.6 + 0.4) * (baseBreath * 0.5 + 0.5) * 200;
+
+            const p = Math.sin(i * 0.025 + t * 0.008) * Math.cos(i * 0.01 - t * 0.004);
+            const threshold = 0.62;
+
+            let r = 0;
+            let g = Math.round(greenGlow);
+            let b = 0;
+
+            if (p > threshold) {
+              const pollutionIntensity = (p - threshold) / (1 - threshold);
+              r = Math.round(pollutionIntensity * 255);
+              g = Math.round((1 - pollutionIntensity) * greenGlow);
+            }
+
+            setVirtualPixel(i, r, g, b);
+          }
+        }
+      },
+      sparkles: {
+        tickScale: 1,
+        run: (t) => {
+          for (let i = 0; i < totalLeds; i++) {
+            const p = virtualLeds[i];
+            setVirtualPixel(i, Math.max(0, p.r * 240 / brightness), Math.max(0, p.g * 240 / brightness), Math.max(0, p.b * 240 / brightness));
+          }
+          const numSparkles = Math.floor(totalLeds / 75) || 1;
+          for (let s = 0; s < numSparkles; s++) {
+            if (Math.random() < 0.3) {
+              const randIdx = Math.floor(Math.random() * totalLeds);
+              const randColor = Math.random();
+              if (randColor < 0.6) {
+                setVirtualPixel(randIdx, 255, 255, 255); // White
+              } else if (randColor < 0.8) {
+                setVirtualPixel(randIdx, 255, 200, 50); // Gold
+              } else {
+                setVirtualPixel(randIdx, 100, 200, 255); // Blue
+              }
+            }
+          }
+        }
+      }
+    };
+
+    // --- Render LED Canvas ---
+    function renderCanvas() {
+      updateCanvasSize();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      pixelCoords = [];
+
+      const margin = 10;
+      const displayWidth = canvas.width - (margin * 2);
+      const displayHeight = canvas.height - (margin * 2);
+
+      if (selectedLayout === 'line') {
+        const y = (canvas.height - 8) / 2;
+        const pixelWidth = 4;
+        
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(0, y, totalLeds * pixelWidth, 8);
+
+        for (let idx = 0; idx < totalLeds; idx++) {
+          const rgb = virtualLeds[idx];
+          const isLit = (rgb.r > 2 || rgb.g > 2 || rgb.b > 2);
+          if (isLit) {
+            ctx.fillStyle = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
+            ctx.fillRect(idx * pixelWidth, y, pixelWidth, 8);
+          }
+        }
+      } else if (selectedLayout === 'matrix') {
+        const cols = 30;
+        const rows = 10;
+        const spacingX = displayWidth / (cols - 1);
+        const spacingY = displayHeight / (rows - 1);
+        const radius = Math.min(spacingX, spacingY) * 0.35;
+
+        for (let idx = 0; idx < totalLeds; idx++) {
+          const row = Math.floor(idx / cols);
+          const col = idx % cols;
+          
+          if (row >= rows) break;
+
+          const x = margin + col * spacingX;
+          const y = margin + row * spacingY;
+
+          drawLed(x, y, radius, virtualLeds[idx], idx);
+        }
+      } else if (selectedLayout === 'columns') {
+        const halfWidth = displayWidth / 2;
+        const innerMargin = 20;
+
+        drawStripBlock(margin, margin, halfWidth - innerMargin, displayHeight, 0, Math.ceil(totalLeds / 2), "Left Segment (0-" + (Math.ceil(totalLeds / 2) - 1) + ")");
+        drawStripBlock(margin + halfWidth + innerMargin, margin, halfWidth - innerMargin, displayHeight, Math.ceil(totalLeds / 2), totalLeds - Math.ceil(totalLeds / 2), "Right Segment (" + Math.ceil(totalLeds / 2) + "-" + (totalLeds - 1) + ")");
+
+      } else if (selectedLayout === 'serpentine') {
+        const cols = 30;
+        const rows = 10;
+        const spacingX = displayWidth / (cols - 1);
+        const spacingY = displayHeight / (rows - 1);
+        const radius = Math.min(spacingX, spacingY) * 0.35;
+
+        for (let idx = 0; idx < totalLeds; idx++) {
+          const row = Math.floor(idx / cols);
+          let col = idx % cols;
+          
+          if (row % 2 === 1) {
+            col = (cols - 1) - col;
+          }
+
+          if (row >= rows) break;
+
+          const x = margin + col * spacingX;
+          const y = margin + row * spacingY;
+
+          drawLed(x, y, radius, virtualLeds[idx], idx);
+        }
+      }
+    }
+
+    function drawLed(x, y, radius, rgb, idx) {
+      const colorStr = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
+      const isLit = (rgb.r > 5 || rgb.g > 5 || rgb.b > 5);
+
+      if (isLit) {
+        ctx.beginPath();
+        const glowRad = radius * 3.2;
+        const glow = ctx.createRadialGradient(x, y, radius * 0.2, x, y, glowRad);
+        glow.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b}, 0.5)`);
+        glow.addColorStop(0.3, `rgba(${rgb.r},${rgb.g},${rgb.b}, 0.15)`);
+        glow.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = glow;
+        ctx.arc(x, y, glowRad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = isLit ? colorStr : '#1e293b';
+      ctx.strokeStyle = isLit ? 'rgba(255, 255, 255, 0.4)' : '#334155';
+      ctx.lineWidth = 1;
+      ctx.fill();
+      ctx.stroke();
+
+      pixelCoords.push({ x, y, radius, index: idx });
+    }
+
+    function drawStripBlock(startX, startY, width, height, startIndex, count, label) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+      ctx.font = "bold 11px Inter";
+      ctx.fillText(label, startX, startY + 12);
+
+      const gridStartY = startY + 22;
+      const gridHeight = height - 22;
+
+      const cols = 15;
+      const rows = Math.ceil(count / cols);
+      
+      const spacingX = width / (cols - 1);
+      const spacingY = gridHeight / (rows - 1);
+      const radius = Math.min(spacingX, spacingY) * 0.35;
+
+      for (let localIdx = 0; localIdx < count; localIdx++) {
+        const virtualIdx = startIndex + localIdx;
+        if (virtualIdx >= totalLeds) break;
+
+        const row = Math.floor(localIdx / cols);
+        let col = localIdx % cols;
+        if (row % 2 === 1) {
+          col = (cols - 1) - col;
+        }
+
+        const x = startX + col * spacingX;
+        const y = gridStartY + row * spacingY;
+
+        drawLed(x, y, radius, virtualLeds[virtualIdx], virtualIdx);
+      }
+    }
+
+    // --- Tooltip Event Handler ---
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
+      const mouseX = (e.clientX - rect.left) * scaleX;
+      const mouseY = (e.clientY - rect.top) * scaleY;
+
+      let hoveredLed = null;
+
+      if (selectedLayout === 'line') {
+        const yStart = (canvas.height - 8) / 2;
+        const yEnd = yStart + 8;
+        const pixelWidth = 4;
+        
+        if (mouseY >= yStart - 15 && mouseY <= yEnd + 15 && mouseX >= 0 && mouseX < totalLeds * pixelWidth) {
+          hoveredLed = { index: Math.floor(mouseX / pixelWidth) };
+        }
+      } else {
+        for (const item of pixelCoords) {
+          const dist = Math.hypot(mouseX - item.x, mouseY - item.y);
+          if (dist <= item.radius * 2) {
+            hoveredLed = item;
+            break;
+          }
+        }
+      }
+
+      if (hoveredLed !== null) {
+        const virtualIdx = hoveredLed.index;
+
+        tooltip.innerHTML = `
+          <strong>Logical Pixel Cluster #${virtualIdx}</strong><br>
+          UCS7604 Driver (Pin ${pin1})<br>
+          Cluster Width: ${virtualIdx * 4} - ${(virtualIdx + 1) * 4 - 1} canvas px
+        `;
+        
+        const pageX = e.clientX - rect.left + 15;
+        const pageY = e.clientY - rect.top + 15;
+        tooltip.style.left = `${pageX}px`;
+        tooltip.style.top = `${pageY}px`;
+        tooltip.style.display = 'block';
+      } else {
+        tooltip.style.display = 'none';
+      }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      tooltip.style.display = 'none';
+    });
+
+    // --- Simulation Core Loop ---
+    function animationStep(timestamp) {
+      if (!lastTime) lastTime = timestamp;
+      const elapsed = timestamp - lastTime;
+
+      const targetFrameTime = Math.max(2, (101 - delayMs) * (animations[currentAnim].tickScale || 1));
+
+      if (isPlaying && elapsed >= targetFrameTime) {
+        tick++;
+        animations[currentAnim].run(tick);
+        renderCanvas();
+        lastTime = timestamp;
+      } else if (!isPlaying) {
+        renderCanvas();
+      }
+
+      animationFrameId = requestAnimationFrame(animationStep);
+    }
+
+    // Start simulation
+    updateCanvasSize();
+    animationFrameId = requestAnimationFrame(animationStep);
+
+    // --- Control Handlers ---
+    playBtn.addEventListener('click', () => {
+      isPlaying = !isPlaying;
+      if (isPlaying) {
+        playIcon.textContent = '⏸';
+        playText.textContent = 'Pause';
+        stepBtn.disabled = true;
+      } else {
+        playIcon.textContent = '▶';
+        playText.textContent = 'Play';
+        stepBtn.disabled = false;
+      }
+    });
+
+    stepBtn.addEventListener('click', () => {
+      tick++;
+      animations[currentAnim].run(tick);
+      renderCanvas();
+    });
+
+    resetBtn.addEventListener('click', () => {
+      tick = 0;
+      initVirtualLeds();
+      animations[currentAnim].run(0);
+      renderCanvas();
+    });
+
+    speedSlider.addEventListener('input', (e) => {
+      delayMs = parseInt(e.target.value);
+      speedVal.textContent = `${Math.round(101 - delayMs)} ms`;
+      updateGeneratedCode();
+    });
+
+    brightSlider.addEventListener('input', (e) => {
+      brightness = parseInt(e.target.value);
+      brightVal.textContent = `${brightness} / 255`;
+      updateGeneratedCode();
+    });
+
+    animSelect.addEventListener('change', (e) => {
+      currentAnim = e.target.value;
+      tick = 0;
+      initVirtualLeds();
+      updateGeneratedCode();
+    });
+
+    layoutSelect.addEventListener('change', (e) => {
+      selectedLayout = e.target.value;
+      renderCanvas();
+    });
+
+    // Handle Pin and Count changes
+    function onConfigChange() {
+      numLeds1 = parseInt(count1Input.value) || 300;
+      pin1 = parseInt(pin1Input.value) || 6;
+      initVirtualLeds();
+      updateCanvasSize();
+      updateGeneratedCode();
+    }
+    pin1Input.addEventListener('input', onConfigChange);
+    count1Input.addEventListener('input', onConfigChange);
+
+
+    // --- Code Generation Templates ---
+    const codeTemplates = {
+      redSweep: () => `#include <FastLED.h>
+
+// ==========================================
+// CONFIGURATION SETTINGS
+// ==========================================
+
+#define DATA_PIN    ${pin1}
+#define NUM_LEDS    ${numLeds1}
+#define BRIGHTNESS  ${brightness}
+
+// Set animation delay speed (matches simulator setting)
+#define STEP_DELAY_MS ${Math.round(101 - delayMs)}
+
+CRGB leds[NUM_LEDS];
+
+// ==========================================
+// SETUP & LOOP
+// ==========================================
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  
+  // Initialize FastLED with UCS7604 driver
+  FastLED.addLeds<UCS7604, DATA_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(BRIGHTNESS);
+  
+  FastLED.clear();
+  FastLED.show();
+}
+
+void loop() {
+  // Clear all LEDs
+  FastLED.clear();
+  FastLED.show();
+  delay(1000);
+
+  // Sweep Red color across all LEDs one-by-one
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = CRGB::Red;
+    FastLED.show();
+    delay(STEP_DELAY_MS);
+  }
+
+  // Hold all LEDs in red state for 2 seconds
+  delay(2000);
+}`,
+
+      rainbowWave: () => `#include <FastLED.h>
+
+// ==========================================
+// CONFIGURATION SETTINGS
+// ==========================================
+
+#define DATA_PIN    ${pin1}
+#define NUM_LEDS    ${numLeds1}
+#define BRIGHTNESS  ${brightness}
+
+// Speed factor for rainbow movement
+#define STEP_DELAY_MS ${Math.round(101 - delayMs)}
+
+CRGB leds[NUM_LEDS];
+uint8_t hueOffset = 0; // Tracks the movement of the rainbow
+
+// ==========================================
+// SETUP & LOOP
+// ==========================================
+
+void setup() {
+  FastLED.addLeds<UCS7604, DATA_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(BRIGHTNESS);
+  FastLED.clear();
+  FastLED.show();
+}
+
+void loop() {
+  // Generate rainbow wave across logical clusters
+  for (int i = 0; i < NUM_LEDS; i++) {
+    // Distribute hue offset across the strip
+    uint8_t hue = (i * 255 / NUM_LEDS) + hueOffset;
+    leds[i] = CHSV(hue, 240, 255);
+  }
+  FastLED.show();
+  hueOffset++;
+  delay(STEP_DELAY_MS);
+}`,
+
+      riverFlow: () => `#include <FastLED.h>
+
+// ==========================================
+// CONFIGURATION SETTINGS
+// ==========================================
+
+#define DATA_PIN    ${pin1}
+#define NUM_LEDS    ${numLeds1}
+#define BRIGHTNESS  ${brightness}
+
+// Frame delay in milliseconds
+#define LOOP_DELAY_MS 15
+
+CRGB leds[NUM_LEDS];
+float flowPosition = 0;
+float tidePhase = 0;
+
+// ==========================================
+// SETUP & LOOP
+// ==========================================
+
+void setup() {
+  FastLED.addLeds<UCS7604, DATA_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(BRIGHTNESS);
+  FastLED.clear();
+  FastLED.show();
+}
+
+void loop() {
+  // 1. Advance the tidal phase cycle (slow sine wave modulation)
+  tidePhase += 0.003; 
+  if (tidePhase >= TWO_PI) tidePhase = 0;
+  
+  // 2. Flow speed oscillates between positive (downstream) and negative (upstream)
+  float flowSpeed = sin(tidePhase) * 1.5;
+  flowPosition += flowSpeed;
+  
+  // 3. speedMagnitude represents water agitation (for foam/light reflection)
+  float speedMagnitude = abs(flowSpeed);
+  
+  // 4. Calculate color for each virtual pixel
+  for (int i = 0; i < NUM_LEDS; i++) {
+    // Overlapping sine waves moving relative to the tide flowPosition
+    float wave1 = (sin(i * 0.03 - flowPosition) + 1.0) / 2.0;
+    float wave2 = (sin(i * 0.08 - flowPosition * 1.3 + PI) + 1.0) / 2.0;
+    float riverVal = (wave1 + wave2) / 2.0;
+    
+    // Interpolate colors: Calm Deep Blue -> Teal/Cyan -> White Foam
+    uint8_t r = (uint8_t)(riverVal * 120.0 * speedMagnitude);
+    uint8_t g = (uint8_t)(20.0 + riverVal * 180.0 * speedMagnitude);
+    uint8_t b = (uint8_t)(100.0 + riverVal * 155.0);
+    
+    leds[i] = CRGB(r, g, b);
+  }
+  
+  FastLED.show();
+  delay(LOOP_DELAY_MS);
+}`,
+
+      pulseCyan: () => `#include <FastLED.h>
+
+// ==========================================
+// CONFIGURATION SETTINGS
+// ==========================================
+
+#define DATA_PIN    ${pin1}
+#define NUM_LEDS    ${numLeds1}
+#define BRIGHTNESS  ${brightness}
+
+// Speed of breathing pulse
+#define STEP_DELAY_MS ${Math.round((101 - delayMs) * 0.4)}
+
+CRGB leds[NUM_LEDS];
+float pulseAngle = 0;
+
+// ==========================================
+// SETUP & LOOP
+// ==========================================
+
+void setup() {
+  FastLED.addLeds<UCS7604, DATA_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(BRIGHTNESS);
+  FastLED.clear();
+  FastLED.show();
+}
+
+void loop() {
+  // Breathing algorithm using sine wave
+  float factor = (sin(pulseAngle) + 1.0) / 2.0; // Oscillates between 0.0 and 1.0
+  pulseAngle += 0.01;
+  if (pulseAngle >= TWO_PI) pulseAngle = 0;
+
+  // Scale RGB channels for Cyan pulse
+  uint8_t r = 0;
+  uint8_t g = (uint8_t)(factor * 180);
+  uint8_t b = (uint8_t)(factor * 255);
+
+  fill_solid(leds, NUM_LEDS, CRGB(r, g, b));
+  FastLED.show();
+  
+  delay(STEP_DELAY_MS);
+}`,
+
+      airQuality: () => `#include <FastLED.h>
+
+// ==========================================
+// CONFIGURATION SETTINGS
+// ==========================================
+
+#define DATA_PIN    ${pin1}
+#define NUM_LEDS    ${numLeds1}
+#define BRIGHTNESS  ${brightness}
+
+// Frame delay in milliseconds
+#define LOOP_DELAY_MS 20
+
+CRGB leds[NUM_LEDS];
+unsigned long loopCounter = 0;
+
+// ==========================================
+// SETUP & LOOP
+// ==========================================
+
+void setup() {
+  FastLED.addLeds<UCS7604, DATA_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(BRIGHTNESS);
+  FastLED.clear();
+  FastLED.show();
+}
+
+void loop() {
+  loopCounter++;
+  float t = loopCounter;
+  
+  // 1. Slow breathing background for healthy green air
+  float baseBreath = (sin(t * 0.01) + 1.0) / 2.0; // Oscillates 0.0 to 1.0
+  
+  for (int i = 0; i < NUM_LEDS; i++) {
+    // 2. Spatial patches of healthy green
+    float spatialGreen = (sin(i * 0.035 + t * 0.005) * Math.cos(i * 0.015) + 1.0) / 2.0;
+    float greenGlow = (spatialGreen * 0.6 + 0.4) * (baseBreath * 0.5 + 0.5) * 200.0;
+    
+    // Default state: Breathing healthy green
+    uint8_t r = 0;
+    uint8_t g = (uint8_t)greenGlow;
+    uint8_t b = 0;
+    
+    // 3. Mathematical model for localized pollution events
+    float p = sin(i * 0.025 + t * 0.008) * Math.cos(i * 0.01 - t * 0.004);
+    float threshold = 0.62;
+    
+    if (p > threshold) {
+      float pollutionIntensity = (p - threshold) / (1.0 - threshold);
+      r = (uint8_t)(pollutionIntensity * 255.0);
+      g = (uint8_t)((1.0 - pollutionIntensity) * greenGlow);
+    }
+    
+    leds[i] = CRGB(r, g, b);
+  }
+  
+  FastLED.show();
+  delay(LOOP_DELAY_MS);
+}`,
+
+      sparkles: () => `#include <FastLED.h>
+
+// ==========================================
+// CONFIGURATION SETTINGS
+// ==========================================
+
+#define DATA_PIN    ${pin1}
+#define NUM_LEDS    ${numLeds1}
+#define BRIGHTNESS  ${brightness}
+
+// Frequency of updates
+#define LOOP_DELAY_MS 25
+
+CRGB leds[NUM_LEDS];
+
+// ==========================================
+// SETUP & LOOP
+// ==========================================
+
+void setup() {
+  FastLED.addLeds<UCS7604, DATA_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(BRIGHTNESS);
+  FastLED.clear();
+  FastLED.show();
+  
+  // Seed random number generator using open analog pin
+  randomSeed(analogRead(0));
+}
+
+void loop() {
+  // 1. Fade all pixels slowly to black to create trails
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i].nscale8(230); // Idiomatic FastLED fade
+  }
+
+  // 2. Randomly spark a few new pixels
+  if (random(100) < 30) {
+    int sparklesToCreate = random(1, 4);
+    for (int s = 0; s < sparklesToCreate; s++) {
+      int randIdx = random(NUM_LEDS);
+      int colorType = random(3);
+      
+      if (colorType == 0) {
+        leds[randIdx] = CRGB(255, 255, 255); // White
+      } else if (colorType == 1) {
+        leds[randIdx] = CRGB(255, 200, 50);  // Gold
+      } else {
+        leds[randIdx] = CRGB(100, 200, 255); // Blue
+      }
+    }
+  }
+
+  FastLED.show();
+  delay(LOOP_DELAY_MS);
+}`
+    };
+
+    function updateGeneratedCode() {
+      const template = codeTemplates[currentAnim];
+      if (template) {
+        codeBlock.textContent = template();
+      }
+    }
+
+    // Initialize code block
+    updateGeneratedCode();
+
+    // Copy to clipboard
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(codeBlock.textContent).then(() => {
+        copyBtn.textContent = 'Copied! ✓';
+        copyBtn.style.background = '#22c55e';
+        copyBtn.style.borderColor = '#22c55e';
+        
+        setTimeout(() => {
+          copyBtn.textContent = 'Copy Arduino Code';
+          copyBtn.style.background = 'rgba(30, 41, 59, 0.9)';
+          copyBtn.style.borderColor = 'var(--border-color)';
+        }, 2000);
+      }).catch(err => {
+        alert('Failed to copy code: ' + err);
+      });
+    });
+
+    // Handle responsiveness on window resize
+    window.addEventListener('resize', () => {
+      renderCanvas();
+    });
+  </script>
+</body>
+</html>
