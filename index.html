@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,10 @@
   <!-- Google Fonts: Inter and Fira Code -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+
   <style>
     :root {
       --bg-dark: #0f172a;
@@ -31,7 +34,7 @@
     body {
       font-family: 'Inter', sans-serif;
       background-color: var(--bg-dark);
-      background-image: 
+      background-image:
         radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.1) 0px, transparent 50%),
         radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%);
       color: var(--text-main);
@@ -152,14 +155,17 @@
     .simulator-container::-webkit-scrollbar {
       height: 8px;
     }
+
     .simulator-container::-webkit-scrollbar-track {
       background: rgba(15, 23, 42, 0.6);
       border-radius: 4px;
     }
+
     .simulator-container::-webkit-scrollbar-thumb {
       background: rgba(59, 130, 246, 0.4);
       border-radius: 4px;
     }
+
     .simulator-container::-webkit-scrollbar-thumb:hover {
       background: rgba(59, 130, 246, 0.6);
     }
@@ -179,7 +185,7 @@
       pointer-events: none;
       display: none;
       z-index: 100;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
       white-space: nowrap;
     }
 
@@ -204,7 +210,8 @@
       letter-spacing: 0.05em;
     }
 
-    .control-group input, .control-group select {
+    .control-group input,
+    .control-group select {
       background: rgba(15, 23, 42, 0.6);
       border: 1px solid var(--border-color);
       color: var(--text-main);
@@ -216,7 +223,8 @@
       transition: all 0.2s;
     }
 
-    .control-group input:focus, .control-group select:focus {
+    .control-group input:focus,
+    .control-group select:focus {
       border-color: var(--accent-primary);
       box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
     }
@@ -232,7 +240,7 @@
       height: 6px;
       border-radius: 3px;
       outline: none;
-      background: rgba(255,255,255,0.1);
+      background: rgba(255, 255, 255, 0.1);
       -webkit-appearance: none;
     }
 
@@ -326,7 +334,8 @@
     .code-scroll {
       flex: 1;
       overflow: auto;
-      max-height: 380px; /* Aligned with Controls Panel height */
+      max-height: 380px;
+      /* Aligned with Controls Panel height */
     }
 
     pre {
@@ -368,7 +377,7 @@
       grid-template-columns: 1fr 1fr;
       gap: 1rem;
     }
-    
+
     @media (max-width: 640px) {
       .grid-2 {
         grid-template-columns: 1fr;
@@ -408,6 +417,7 @@
     }
   </style>
 </head>
+
 <body>
 
   <header>
@@ -427,7 +437,10 @@
     <div class="card full-width-card">
       <div class="card-header">
         <h2>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v20M2 12h20"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 2v20M2 12h20" />
+          </svg>
           Interactive Preview
         </h2>
         <div class="control-group" style="flex-direction: row; align-items: center; gap: 0.5rem; margin-bottom: 0;">
@@ -464,7 +477,10 @@
     <div class="card">
       <div class="card-header">
         <h2>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path
+              d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          </svg>
           Simulator Controls
         </h2>
       </div>
@@ -493,8 +509,8 @@
           <div class="control-group">
             <label>Global Brightness Limit</label>
             <div class="slider-container">
-              <input type="range" id="brightSlider" min="10" max="255" value="50">
-              <div class="slider-value" id="brightVal">50 / 255</div>
+              <input type="range" id="brightSlider" min="10" max="255" value="175">
+              <div class="slider-value" id="brightVal">175 / 255</div>
             </div>
           </div>
         </div>
@@ -523,10 +539,13 @@
     <div class="card">
       <div class="card-header">
         <h2>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
+          </svg>
           Arduino Code Generator
         </h2>
-        <span class="badge" style="background: rgba(139, 92, 246, 0.2); border-color: rgba(139, 92, 246, 0.4); color: #c084fc;">Auto-Synced</span>
+        <span class="badge"
+          style="background: rgba(139, 92, 246, 0.2); border-color: rgba(139, 92, 246, 0.4); color: #c084fc;">Auto-Synced</span>
       </div>
       <div class="code-container">
         <div class="code-tabs">
@@ -600,10 +619,10 @@
       if (index >= 0 && index < totalLeds) {
         // Apply local brightness scaling to the preview
         const scale = brightness / 255;
-        virtualLeds[index] = { 
-          r: Math.round(r * scale), 
-          g: Math.round(g * scale), 
-          b: Math.round(b * scale) 
+        virtualLeds[index] = {
+          r: Math.round(r * scale),
+          g: Math.round(g * scale),
+          b: Math.round(b * scale)
         };
       }
     }
@@ -617,16 +636,16 @@
         const hue2rgb = (p, q, t) => {
           if (t < 0) t += 1;
           if (t > 1) t -= 1;
-          if (t < 1/6) return p + (q - p) * 6 * t;
-          if (t < 1/2) return q;
-          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+          if (t < 1 / 6) return p + (q - p) * 6 * t;
+          if (t < 1 / 2) return q;
+          if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
           return p;
         };
         const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
         const p = 2 * l - q;
-        r = hue2rgb(p, q, h + 1/3);
+        r = hue2rgb(p, q, h + 1 / 3);
         g = hue2rgb(p, q, h);
-        b = hue2rgb(p, q, h - 1/3);
+        b = hue2rgb(p, q, h - 1 / 3);
       }
       return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
     }
@@ -637,7 +656,7 @@
         canvas.width = totalLeds; // exactly 1200px width (1px per LED)
         canvas.height = 80;
         simContainer.style.overflowX = 'auto';
-        simContainer.style.justifyContent = 'center'; 
+        simContainer.style.justifyContent = 'center';
       } else {
         canvas.width = 560;
         canvas.height = 400;
@@ -679,15 +698,15 @@
       riverFlow: {
         tickScale: 1,
         run: (t) => {
-          const tidePhase = t * 0.003; 
+          const tidePhase = t * 0.003;
           const flowSpeed = Math.sin(tidePhase) * 1.5;
-          const flowPosition = -Math.cos(tidePhase) * 500; 
-          const speedMagnitude = Math.abs(flowSpeed); 
+          const flowPosition = -Math.cos(tidePhase) * 500;
+          const speedMagnitude = Math.abs(flowSpeed);
 
           for (let i = 0; i < totalLeds; i++) {
             const wave1 = (Math.sin(i * 0.03 - flowPosition) + 1) / 2;
             const wave2 = (Math.sin(i * 0.08 - flowPosition * 1.3 + Math.PI) + 1) / 2;
-            const riverVal = (wave1 + wave2) / 2; 
+            const riverVal = (wave1 + wave2) / 2;
 
             const r = Math.round(riverVal * 120 * speedMagnitude);
             const g = Math.round(20 + riverVal * 180 * speedMagnitude);
@@ -777,7 +796,7 @@
 
       if (selectedLayout === 'line') {
         const y = (canvas.height - 5) / 2;
-        
+
         ctx.fillStyle = '#1e293b';
         ctx.fillRect(0, y, totalLeds, 5);
 
@@ -799,7 +818,7 @@
         for (let idx = 0; idx < totalLeds; idx++) {
           const row = Math.floor(idx / cols);
           const col = idx % cols;
-          
+
           if (row >= rows) break;
 
           const x = margin + col * spacingX;
@@ -824,7 +843,7 @@
         for (let idx = 0; idx < totalLeds; idx++) {
           const row = Math.floor(idx / cols);
           let col = idx % cols;
-          
+
           if (row % 2 === 1) {
             col = (cols - 1) - col;
           }
@@ -876,7 +895,7 @@
 
       const cols = 20;
       const rows = Math.ceil(count / cols);
-      
+
       const spacingX = width / (cols - 1);
       const spacingY = gridHeight / (rows - 1);
       const radius = Math.min(spacingX, spacingY) * 0.35;
@@ -912,7 +931,7 @@
       if (selectedLayout === 'line') {
         const yStart = (canvas.height - 5) / 2;
         const yEnd = yStart + 5;
-        
+
         if (mouseY >= yStart - 15 && mouseY <= yEnd + 15 && mouseX >= 0 && mouseX < totalLeds) {
           hoveredLed = { index: Math.floor(mouseX) };
         }
@@ -943,7 +962,7 @@
           Strip ${physicalStrip} (Pin ${physicalPin})<br>
           Physical LED #${physicalIdx}
         `;
-        
+
         const pageX = e.clientX - rect.left + 15;
         const pageY = e.clientY - rect.top + 15;
         tooltip.style.left = `${pageX}px`;
@@ -1640,7 +1659,7 @@ void loop() {
         copyBtn.textContent = 'Copied! ✓';
         copyBtn.style.background = '#22c55e';
         copyBtn.style.borderColor = '#22c55e';
-        
+
         setTimeout(() => {
           copyBtn.textContent = 'Copy Arduino Code';
           copyBtn.style.background = 'rgba(30, 41, 59, 0.9)';
@@ -1657,4 +1676,5 @@ void loop() {
     });
   </script>
 </body>
+
 </html>
