@@ -1,0 +1,2093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manifold Light Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f11;
+    --surface: #15181b;
+    --line: #25292e;
+    --text: #e6e8ea;
+    --dim: #868d95;
+    --accent: #7cc4b4;
+    --font: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.45; }
+  .wrap { max-width: 1600px; margin: 0 auto; padding: 1.4rem 1.8rem 2.5rem; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Header */
+  .top { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; justify-content: space-between; margin-bottom: 1.4rem; }
+  .title { font-size: 1.15rem; font-weight: 600; }
+  .top-controls { display: flex; flex-wrap: wrap; gap: 1.4rem; align-items: center; }
+  .seg { display: inline-flex; gap: 1rem; }
+  .seg button { background: none; border: 0; color: var(--dim); font: inherit; padding: 0.2rem 0; cursor: pointer; }
+  .seg button:hover { color: var(--text); }
+  .seg button.on { color: var(--accent); }
+  .field { display: flex; align-items: center; gap: 0.5rem; color: var(--dim); }
+  .field input { width: 4.2rem; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; color: var(--text); padding: 0.25rem 0.4rem; font: inherit; }
+
+  /* Strip */
+  .stage { margin-bottom: 1.8rem; }
+  .sticky-strip {
+    position: sticky; top: 0; z-index: 10; background: var(--bg);
+    margin: 0 -1.8rem; padding: 0.7rem 1.8rem 0.6rem;
+  }
+  .sticky-strip.stuck { border-bottom: 1px solid var(--line); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45); }
+  .strip-holder { position: relative; }
+  #strip { display: block; width: 100%; height: 24px; cursor: crosshair; }
+  .tip {
+    position: absolute; top: calc(100% + 6px); transform: translateX(-50%); z-index: 2;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
+    padding: 0.35rem 0.55rem; font-size: 0.8rem; white-space: nowrap; pointer-events: none; display: none;
+  }
+  .ruler { position: relative; height: 40px; margin-top: 0.3rem; }
+  .tick-label.mill-label { top: 22px; color: var(--accent); font-weight: 600; }
+  .tick-mark { position: absolute; top: 0; width: 1px; height: 6px; background: var(--dim); opacity: 0.5; }
+  .tick-mark.minor { height: 3px; opacity: 0.25; }
+  .tick-label { position: absolute; top: 9px; transform: translateX(-50%); font-size: 0.72rem; color: var(--dim); white-space: nowrap; }
+
+  /* Playback */
+  /* Playback: what's playing on the left, buttons in the middle, mode on the right */
+  .transport { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 1rem; margin-top: 0.6rem; }
+  .transport .buttons { display: flex; gap: 0.4rem; justify-self: center; }
+  .transport .seg { justify-self: end; }
+  /* Narrower windows: the playing info gets its own line above the buttons, so nothing is cut off */
+  @media (max-width: 1150px) {
+    .transport { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+    .transport .status { grid-column: 1 / -1; grid-row: 1; }
+    .transport .buttons { grid-column: 2; grid-row: 2; }
+    .transport .seg { grid-column: 3; grid-row: 2; }
+  }
+  .btn { background: var(--surface); border: 1px solid var(--line); color: var(--text); font: inherit; padding: 0.35rem 0.8rem; border-radius: 4px; cursor: pointer; }
+  .btn:hover { border-color: var(--dim); }
+  .btn.primary { border-color: var(--accent); color: var(--accent); }
+  .btn.icon { width: 36px; height: 32px; padding: 0; display: inline-grid; place-items: center; }
+  .btn.icon svg { width: 14px; height: 14px; fill: currentColor; }
+  /* Fixed widths and same-width digits, so the changing time never pushes anything along */
+  .status { justify-self: stretch; display: flex; flex-wrap: nowrap; gap: 1rem; color: var(--dim); white-space: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; }
+  .status span { flex: none; }
+  .status .st-name { color: var(--text); font-weight: 600; width: 15em; overflow: hidden; text-overflow: ellipsis; }
+  .status .st-time { width: 6.4em; }
+  .status .st-loop { width: 8.2em; }
+  .status .st-trans { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Versions */
+  .versions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--line); }
+  .versions .v-label { color: var(--dim); margin-right: 0.3rem; }
+  .versions input[type=text], .versions select {
+    background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 4px;
+    font: inherit; padding: 0.3rem 0.5rem;
+  }
+  .versions input[type=text] { width: 13rem; }
+  .versions select { min-width: 12rem; }
+  .versions .gap { width: 0.8rem; }
+  .versions .v-msg { color: var(--dim); font-size: 0.82rem; margin-left: 0.4rem; }
+
+  /* Columns */
+  .cols-scroll { overflow-x: auto; }
+  .cols { display: grid; grid-template-columns: minmax(250px, 1fr) minmax(240px, 0.9fr) minmax(340px, 1.4fr); gap: 1.5rem; min-width: 860px; align-items: start; }
+  .col-head { margin-bottom: 0.8rem; }
+  .col-head h2 { font-size: 0.95rem; font-weight: 600; }
+  .col-head .hint { font-size: 0.8rem; color: var(--dim); }
+
+  /* Sequence */
+  .anim-row { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.55rem 0.6rem; border-left: 2px solid transparent; cursor: pointer; }
+  .anim-row:hover { background: var(--surface); }
+  .anim-row.selected { border-left-color: var(--accent); background: var(--surface); }
+  .tickbox { flex: none; width: 6px; height: 6px; border-radius: 50%; margin-top: 0.45rem; background: transparent; }
+  .anim-row.playing .tickbox { background: var(--accent); }
+  .anim-main { flex: 1; min-width: 0; }
+  .anim-name { font-weight: 600; display: flex; align-items: baseline; gap: 0.5rem; }
+  .anim-row.selected .anim-name { color: var(--accent); }
+  .now { font-weight: 400; font-size: 0.78rem; color: var(--dim); display: none; }
+  .anim-row.playing .now { display: inline; }
+  .anim-meta { display: flex; flex-wrap: wrap; gap: 0 0.8rem; font-size: 0.78rem; color: var(--dim); }
+  .prog { height: 2px; background: var(--line); margin-top: 0.4rem; }
+  .prog-fill { height: 2px; width: 0%; background: var(--accent); }
+  .pos-select, .trans-row select {
+    background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 4px;
+    font: inherit; font-size: 0.8rem; padding: 0.15rem 0.25rem; cursor: pointer;
+  }
+  .trans-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; padding: 0.35rem 0.6rem 0.35rem 1.6rem; font-size: 0.8rem; color: var(--dim); border-bottom: 1px solid var(--line); }
+  .trans-row .t-type { max-width: 10.5rem; }
+  .trans-row.active { color: var(--accent); }
+  .trans-row .mini { background: none; border: 0; color: var(--accent); font: inherit; cursor: pointer; }
+
+  /* Settings */
+  .set-title { font-size: 1.1rem; font-weight: 600; }
+  .set-desc { font-size: 0.82rem; color: var(--dim); margin: 0.3rem 0 1.2rem; }
+  .control { margin-bottom: 1rem; }
+  .control label { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem; }
+  .control label span { color: var(--dim); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  input[type=color] { width: 100%; height: 28px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); padding: 2px; cursor: pointer; }
+  .group-title { font-size: 0.8rem; color: var(--dim); margin: 1.4rem 0 0.8rem; padding-top: 0.9rem; border-top: 1px solid var(--line); }
+  .set-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.2rem; }
+  .note { font-size: 0.78rem; color: var(--dim); margin-top: 0.9rem; }
+  .months { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.4rem; }
+  .month { display: flex; flex-direction: column; gap: 0.2rem; }
+  .month-btn { background: var(--surface); border: 1px solid var(--line); color: var(--dim); font: inherit; font-size: 0.74rem; white-space: nowrap; padding: 0.25rem 0; border-radius: 4px; cursor: pointer; }
+  .month-btn:hover { color: var(--text); border-color: var(--dim); }
+  .month-btn.on { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .month-count { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; color: var(--text); font: inherit; font-size: 0.8rem; padding: 0.15rem 0.3rem; text-align: center; }
+  .month-now { margin-top: 0.6rem; }
+
+  /* Code */
+  .code-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
+  .code-hw { display: block; font-size: 0.8rem; font-weight: 400; color: var(--dim); }
+  .code-actions { display: flex; gap: 0.4rem; }
+  pre {
+    margin: 0; padding: 0.9rem 1rem; overflow: auto; max-height: 620px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 4px;
+    font-family: var(--mono); font-size: 0.75rem; line-height: 1.55; color: #b3b9bf; tab-size: 2;
+  }
+  .hl { color: var(--text); transition: background 0.8s; }
+  .hl.flash { background: rgba(124, 196, 180, 0.3); transition: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1 class="title">Manifold Light Simulator</h1>
+    <div class="top-controls">
+      <div class="seg" id="hwSeg">
+        <button data-hw="ultra" class="on">300 UltraLED</button>
+        <button data-hw="neo">1200 NeoPixel</button>
+      </div>
+      <label class="field">Strip length <input type="number" id="lengthInput" value="10" min="0.1" step="0.1"> m</label>
+      <label class="field">House Mill <input type="number" id="millInput" value="500" min="0" step="5"> cm</label>
+      <label class="field">Tide changes <input type="number" id="tideInput" value="2" min="0" max="30" step="0.5"> per min</label>
+      <label class="field" title="Overall LED brightness in the Arduino code (0-255). Higher uses more power.">Brightness <input type="number" id="brightInput" value="70" min="1" max="255" step="1"></label>
+    </div>
+  </header>
+
+  <!-- The strip, the distance ruler and playback -->
+  <!-- The strip, ruler and playback stay at the top of the window while you scroll -->
+  <div class="sticky-strip">
+    <div class="strip-holder" id="stripHolder">
+      <canvas id="strip"></canvas>
+      <div class="tip" id="tip"></div>
+    </div>
+    <div class="ruler" id="ruler"></div>
+    <div class="transport">
+      <div class="status" id="status"></div>
+      <div class="buttons">
+        <button class="btn icon" id="restartBtn" aria-label="Restart" title="Restart"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="2.2" height="12" rx="0.5"/><path d="M14 2.2v11.6c0 .5-.5.8-.9.5l-8-5.8c-.4-.3-.4-.8 0-1l8-5.8c.4-.3.9 0 .9.5z"/></svg></button>
+        <button class="btn icon primary" id="playBtn" aria-label="Pause" title="Pause"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" rx="0.5"/><rect x="9.5" y="2" width="3.5" height="12" rx="0.5"/></svg></button>
+        <button class="btn icon" id="nextBtn" aria-label="Next animation" title="Next animation"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.2v11.6c0 .5.5.8.9.5l8-5.8c.4-.3.4-.8 0-1l-8-5.8c-.4-.3-.9 0-.9.5z"/><rect x="11.8" y="2" width="2.2" height="12" rx="0.5"/></svg></button>
+      </div>
+      <div class="seg" id="modeSeg">
+        <button data-mode="sequence" class="on">Whole sequence</button>
+        <button data-mode="single">Selected only</button>
+      </div>
+    </div>
+  </div>
+  <section class="stage">
+      <div class="versions">
+      <span class="v-label">Versions</span>
+      <input type="text" id="versionName" placeholder="Name this version" aria-label="Version name">
+      <button class="btn" id="saveVersion">Save</button>
+      <span class="gap"></span>
+      <select id="versionList" aria-label="Saved versions"></select>
+      <button class="btn" id="loadVersion">Load</button>
+      <button class="btn" id="deleteVersion">Delete</button>
+      <span class="gap"></span>
+      <button class="btn" id="exportVersion">Export file</button>
+      <button class="btn" id="importVersion">Import file</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+      <span class="v-msg" id="versionMsg"></span>
+    </div>
+  </section>
+
+  <div class="cols-scroll">
+  <div class="cols">
+    <section class="col">
+      <div class="col-head"><h2>Sequence</h2></div>
+      <div class="seq-list" id="animList"></div>
+    </section>
+
+    <section class="col">
+      <div class="col-head"><h2>Settings</h2></div>
+      <div id="settingsPanel"></div>
+    </section>
+
+    <section class="col">
+      <div class="col-head code-head">
+        <h2 id="codeTitle">installation.ino</h2>
+        <div class="code-actions">
+          <button class="btn" id="copyBtn">Copy</button>
+          <button class="btn primary" id="downloadBtn">Download .ino</button>
+        </div>
+      </div>
+      <pre><code id="code"></code></pre>
+    </section>
+  </div>
+  </div>
+</div>
+
+<script>
+// =====================================================================
+//  HARDWARE OPTIONS
+// =====================================================================
+const HARDWARE = {
+  ultra: { label: '300 UltraLED', leds: 300,  chip: 'UCS7604', pins: [6] },
+  neo:   { label: '1200 NeoPixel', leds: 1200, chip: 'WS2812',  pins: [5, 6], split: 600 }     // ESP32-S3-Zero, two strips of 600 (as the working test)
+};
+let hwKey = 'ultra';
+let N = HARDWARE[hwKey].leds;
+let stripLength = 10;           // metres: used by the ruler, the hover readout and distance settings
+
+// =====================================================================
+//  SEQUENCE TIMING (same numbers go into the Arduino code)
+// =====================================================================
+const DEFAULT_SECONDS = 60;          // every animation lasts 1 minute, apart from FLOODING & SEWAGE (its own setting)
+const animSeconds = id => settings[id].length || DEFAULT_SECONDS;
+const cycleSeconds = () => order.reduce((t, id) => t + animSeconds(id), 0);
+const startOf = pos => { let t = 0; for (let k = 0; k < pos; k++) t += animSeconds(order[k]); return t; };
+
+// =====================================================================
+//  SMALL HELPERS (the Arduino code has identical versions)
+// =====================================================================
+const clamp01 = x => (x < 0 ? 0 : x > 1 ? 1 : x);
+const smooth01 = x => { x = clamp01(x); return x * x * (3 - 2 * x); };
+const fract = x => x - Math.floor(x);
+const wrapTo = (x, p) => x - p * Math.floor(x / p);
+const mix = (a, b, k) => a + (b - a) * k;
+const rand01 = () => Math.random();
+const hexToRgb = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+// Repeatable "random" number 0-1 for a given whole number (same result in the Arduino code)
+function hash01(k) {
+  let h = Math.imul(k | 0, 2654435761) >>> 0;
+  h ^= h >>> 16; h = Math.imul(h, 2246822519) >>> 0;
+  h ^= h >>> 13; h = Math.imul(h, 3266489917) >>> 0;
+  h ^= h >>> 16;
+  return (h & 0xFFFFFF) / 16777216;
+}
+
+// Twinkles: one flash per LED that rises quickly and fades (used by RIVER and RIVER 2)
+function glintStep(G, i, crest, density, rate, frameScale, fade, lively) {
+  if (G.tg[i] > 0) {
+    G.g[i] += (G.tg[i] - G.g[i]) * Math.min(1, 0.6 * frameScale * rate);
+    if (G.g[i] >= G.tg[i] * 0.9) G.tg[i] = 0;
+  } else G.g[i] *= fade;
+  if (G.tg[i] === 0 && G.g[i] < 0.2 && rand01() < density * 0.3 * crest * lively * frameScale * (300 / N)) {
+    G.tg[i] = Math.min(1, 0.35 + rand01() * 0.6 * crest + (rand01() < 0.08 ? 0.4 : 0));
+  }
+  return G.g[i];
+}
+function glintBuffers(G) {
+  if (!G.g || G.g.length !== N) { G.g = new Float32Array(N); G.tg = new Float32Array(N); return true; }
+  return false;
+}
+
+// =====================================================================
+//  THE RIVER ITSELF (shared by every animation)
+//  House Mill splits the river. To its right the water always flows
+//  towards the mill (right to left). To its left it is tidal: the water
+//  flows towards the mill, then away from it, changing direction a set
+//  number of times per minute. Every animation uses this motion,
+//  so the water never jumps when one animation hands over to the next.
+// =====================================================================
+// Flood events touching the floorboards per month, January to December 2025 (House Mill level below 830 mm)
+const MONTHS = ['January 2025', 'February 2025', 'March 2025', 'April 2025', 'May 2025', 'June 2025',
+                'July 2025', 'August 2025', 'September 2025', 'October 2025', 'November 2025', 'December 2025'];
+const FLOOD_DATA = [5, 5, 11, 11, 6, 3, 1, 3, 9, 12, 9, 5];
+const MONTH_SET = 'jan25-dec25';                       // saved with versions, so older Oct 2023-Sep 2024 data is not mixed up
+const shortMonth = m => MONTHS[m].slice(0, 3) + ' \u2019' + MONTHS[m].slice(-2);   // e.g. Jan ’25
+const defaultPiece = () => ({ millCm: 500, tideChanges: 2, month: 0, floodCounts: FLOOD_DATA.slice(), months: MONTH_SET, brightness: 70 });
+let piece = defaultPiece();
+let holdMonth = false;     // true after a month is chosen, so the next run plays that month rather than moving on
+const FLOW = 0.027;                       // river flow speed (fraction of the strip per second)
+const WAVE1 = 0.15, WAVE2 = 0.15 * 0.37;  // RIVER wave lengths (fraction of the strip)
+const MILL_BLEND = 0.03;                  // how softly the two sides of the mill meet
+let tidePhase = Math.PI * 0.1, riverClock = 0;
+let offL1 = 0, offL2 = 0, offR1 = 0, offR2 = 0;
+
+const millU = () => clamp01(piece.millCm / 100 / stripLength);
+const tideDir = () => Math.tanh(6 * Math.sin(tidePhase));      // +1 flowing right, -1 flowing left
+const flowDirAt = u => (u < millU() ? tideDir() : -1);   // right of the mill: always towards it
+
+function advanceRiver(dt) {
+  tidePhase = wrapTo(tidePhase + Math.PI * piece.tideChanges / 60 * dt, 2 * Math.PI);
+  const v = FLOW * settings[0].speed * dt, d = tideDir();
+  riverClock = wrapTo(riverClock + dt * settings[0].speed, 600);
+  offL1 = wrapTo(offL1 + v * d, WAVE1);  offL2 = wrapTo(offL2 + v * d * 1.3, WAVE2);
+  offR1 = wrapTo(offR1 - v, WAVE1);      offR2 = wrapTo(offR2 - v * 1.3, WAVE2);   // towards the mill
+}
+function resetRiver() { tidePhase = Math.PI * 0.1; riverClock = 0; offL1 = offL2 = offR1 = offR2 = 0; }
+
+// Irregularity: bends the wave positions and varies their height with slow, drifting patterns
+function warpU(u, irr) {
+  const T = riverClock;
+  return u + irr * (0.04 * Math.sin(2 * Math.PI * (u * 1.7 + T * 19 / 600)) + 0.025 * Math.sin(2 * Math.PI * (u * 3.9 - T * 28 / 600) + 1.3));
+}
+function swellAt(u, irr) { return 1 - irr * 0.45 * (0.5 + 0.5 * Math.sin(2 * Math.PI * (u * 2.3 + riverClock * 11 / 600) + 0.7)); }
+function riverShape(uw, o1, o2) {
+  return 0.7 * (Math.sin(2 * Math.PI * (uw - o1) / WAVE1) + 1) * 0.5 + 0.3 * (Math.sin(2 * Math.PI * (uw - o2) / WAVE2 + Math.PI) + 1) * 0.5;
+}
+// Shape of the ideal river at position u: 0 = trough, 1 = crest
+function riverWaveAt(u) {
+  const irr = settings[0].irregular / 100, uw = warpU(u, irr);
+  const k = smooth01((u - millU()) / MILL_BLEND + 0.5);   // 0 = tidal side, 1 = steady side
+  let s = 0;
+  if (k < 1) s += (1 - k) * riverShape(uw, offL1, offL2);
+  if (k > 0) s += k * riverShape(uw, offR1, offR2);
+  return Math.pow(s * swellAt(u, irr), 2.2);
+}
+// Colour of the ideal river (no twinkles) at position u, written into W; returns the wave shape
+function idealWater(u, Tr, Cr, W) {
+  const w = riverWaveAt(u);
+  W[0] = mix(Tr[0], Cr[0], w); W[1] = mix(Tr[1], Cr[1], w); W[2] = mix(Tr[2], Cr[2], w);
+  return w;
+}
+
+// =====================================================================
+//  TRANSITIONS
+//  transitions[p] is the transition from position p to position p+1
+//  (the last one goes from the last position back to 1, because it loops).
+//  The ids match the T_... numbers in the Arduino code.
+// =====================================================================
+const TRANSITION_TYPES = [
+  { id: 0, name: 'Fade' },
+  { id: 1, name: 'Left \u2192 right' },
+  { id: 2, name: 'Right \u2192 left' },
+  { id: 3, name: 'Overlay (next on top)' }
+];
+const TRANSITION_LENGTHS = [1, 2, 3, 5, 8, 10, 15, 20, 30];
+let transitions = [
+  { type: 0, len: 5 }, { type: 3, len: 8 }, { type: 0, len: 5 }, { type: 0, len: 2 }
+];
+const WIPE_EDGE = 0.08;       // softness of the moving edge in left/right transitions
+
+const transLen = slot => transitions[slot].len;
+function wipeMix(p, u) { const front = p * (1 + 2 * WIPE_EDGE) - WIPE_EDGE; return smooth01((front - u) / WIPE_EDGE + 1); }
+
+// Mix LED i of the old (bufA) and new (bufB) animation into final, at progress p (0-1)
+function transitionPixel(type, p, i) {
+  if (type === 3) {                               // overlay: new one on top, old one fades underneath
+    const ka = 1 - smooth01((p - 0.4) / 0.6), kb = smooth01(p / 0.6);
+    final.r[i] = Math.max(bufA.r[i] * ka, bufB.r[i] * kb);
+    final.g[i] = Math.max(bufA.g[i] * ka, bufB.g[i] * kb);
+    final.b[i] = Math.max(bufA.b[i] * ka, bufB.b[i] * kb);
+    return;
+  }
+  const u = i / N;
+  const m = type === 1 ? wipeMix(p, u) : type === 2 ? wipeMix(p, 1 - u) : smooth01(p);
+  final.r[i] = bufA.r[i] + (bufB.r[i] - bufA.r[i]) * m;
+  final.g[i] = bufA.g[i] + (bufB.g[i] - bufA.g[i]) * m;
+  final.b[i] = bufA.b[i] + (bufB.b[i] - bufA.b[i]) * m;
+}
+
+// =====================================================================
+//  ANIMATIONS
+//  Each fills out.r / out.g / out.b (0-255) for time t (seconds, already
+//  multiplied by its speed setting). u = i / N is the position from 0
+//  (left end) to 1 (right end); x is the same position in metres.
+//  The C++ versions in the generated code use the same maths.
+// =====================================================================
+
+// 1. RIVER: the ideal river, with sun glitter on the crests
+function makeRiver() {
+  let lastT = -1; const G = {};
+  return function (t, dt, out) {
+    const s = settings[0];
+    if (glintBuffers(G)) lastT = -1;
+    if (lastT < 0 || t < lastT) { G.g.fill(0); G.tg.fill(0); }
+    lastT = t;
+    const Tr = hexToRgb(s.troughColour), Cr = hexToRgb(s.crestColour), Tw = hexToRgb(s.twinkleColour);
+    const rate = s.twinkleSpeed, frameScale = dt / 0.035, fade = Math.pow(0.78, frameScale * rate);
+    const density = s.twinkleAmount / 100, t2 = 0.68 * 0.68, mill = millU(), calm = Math.abs(tideDir());
+    const W = [0, 0, 0];
+    for (let i = 0; i < N; i++) {
+      const u = i / N;
+      const wave = idealWater(u, Tr, Cr, W);
+      const crest = smooth01((wave - t2) / (1 - t2));
+      const lively = u < mill ? 0.5 + 0.5 * calm : 1;          // the tidal side is calmer while it turns
+      const g = glintStep(G, i, crest, density, rate, frameScale, fade, lively);
+      const gl = Math.min(1, g + crest * 0.1 * lively);
+      out.r[i] = Math.min(255, W[0] + Tw[0] * gl);
+      out.g[i] = Math.min(255, W[1] + Tw[1] * gl);
+      out.b[i] = Math.min(255, W[2] + Tw[2] * gl);
+    }
+  };
+}
+
+// 2. RIVER 2: realistic layered waves (longer waves travel faster) and a green shallows
+function makeRiver2() {
+  let lastT = -1; const G = {};
+  const SIZES = [1, 0.57, 0.35, 0.22], AMPS = [1, 0.55, 0.3, 0.18], PHASES = [0, 1.7, 4.1, 2.6];
+  const oL = [0, 0, 0, 0], oR = [0, 0, 0, 0];
+  return function (t, dt, out) {
+    const s = settings[1];
+    if (glintBuffers(G)) lastT = -1;
+    if (lastT < 0 || t < lastT) { G.g.fill(0); G.tg.fill(0); oL.fill(0); oR.fill(0); }
+    lastT = t;
+    const L = stripLength, layers = Math.max(1, Math.min(4, Math.round(s.layers))), irr = s.irregular / 100;
+    const base = Math.max(0.01, s.spacing / 100 / L);          // longest wave (fraction of the strip)
+    const d = tideDir();
+    const lens = [0, 0, 0, 0];
+    let sumA = 0;
+    for (let k = 0; k < layers; k++) {
+      lens[k] = base * SIZES[k];
+      const c = 0.03 * Math.sqrt(SIZES[k]);                   // longer waves travel faster
+      oL[k] = wrapTo(oL[k] + c * d * dt, lens[k]);
+      oR[k] = wrapTo(oR[k] - c * dt, lens[k]);              // right side: towards the mill
+      sumA += AMPS[k];
+    }
+    const Tr = hexToRgb(s.troughColour), Cr = hexToRgb(s.crestColour), Tw = hexToRgb(s.twinkleColour), Sh = hexToRgb(s.shallowColour);
+    const sx = s.shallowPos / 100, sw = Math.max(0.05, s.shallowWidth / 100), sAmt = s.shallowAmount / 100;
+    const frameScale = dt / 0.035, fade = Math.pow(0.78, frameScale * s.twinkleSpeed);
+    const mill = millU(), calm = Math.abs(d);
+    for (let i = 0; i < N; i++) {
+      const u = i / N, x = (i + 0.5) / N * L;
+      const uw = warpU(u, irr);
+      const kk = smooth01((u - mill) / MILL_BLEND + 0.5);
+      let hL = 0, hR = 0;
+      for (let k = 0; k < layers; k++) {
+        if (kk < 1) hL += AMPS[k] * Math.sin(2 * Math.PI * (uw - oL[k]) / lens[k] + PHASES[k]);
+        if (kk > 0) hR += AMPS[k] * Math.sin(2 * Math.PI * (uw - oR[k]) / lens[k] + PHASES[k]);
+      }
+      const h = (hL * (1 - kk) + hR * kk) / sumA;
+      const env = 0.7 + 0.3 * Math.sin(2 * Math.PI * (u * 0.9 - riverClock * 7 / 600) + 0.4);   // slow sets of bigger waves
+      const wave = Math.pow(clamp01((h * env + 1) / 2 * swellAt(u, irr)), 1.8);                 // sharper crests, broad troughs
+      const crest = smooth01((wave - 0.55) / 0.45);
+      const lively = u < mill ? 0.5 + 0.5 * calm : 1;
+      const g = glintStep(G, i, crest, s.twinkleAmount / 100, s.twinkleSpeed, frameScale, fade, lively);
+      const q = (x - sx) / sw, shallow = sAmt * Math.exp(-q * q);
+      let r = mix(Tr[0], Cr[0], wave), gg = mix(Tr[1], Cr[1], wave), b = mix(Tr[2], Cr[2], wave);
+      r = mix(r, Sh[0] * (0.55 + 0.45 * wave), shallow);
+      gg = mix(gg, Sh[1] * (0.55 + 0.45 * wave), shallow);
+      b = mix(b, Sh[2] * (0.55 + 0.45 * wave), shallow);
+      out.r[i] = Math.min(255, r + Tw[0] * g);
+      out.g[i] = Math.min(255, gg + Tw[1] * g);
+      out.b[i] = Math.min(255, b + Tw[2] * g);
+    }
+  };
+}
+
+// Flooding part: one red surge from House Mill for each flood event in the current month.
+//   Each surge rushes out to the reach on both sides of the mill, then drains away,
+//   The surges are spread evenly over the whole flooding part (D seconds),
+//   so the number of floods fills the time the flooding runs for.
+let floodNow = { k: 0, n: 0 };     // which flood event is showing, for the status line
+let fsStatus = '';
+function makeFlood() {
+  return function (t, dt, out, D) {
+    const s = settings[2], L = stripLength;
+    const n = Math.max(0, Math.round(piece.floodCounts[piece.month] || 0));
+    const x0 = piece.millCm / 100, reach = Math.max(0.05, s.reach / 100), v = s.spread / 100;
+    const every = D / Math.max(1, n);                        // one flood in the middle of each equal slice of the time
+    const rise = reach / v;                                  // seconds to rush out to the reach
+    const drain = Math.max(0.2, s.drain);                    // seconds each surge takes to fade away
+    const life = rise + drain;
+    const C = hexToRgb(s.floodColour), Tr = hexToRgb(settings[0].troughColour), Cr = hexToRgb(settings[0].crestColour);
+    const kMax = Math.min(n - 1, Math.floor(t / every - 0.5));
+    const kMin = Math.max(0, kMax - Math.ceil(life / every) - 1);
+    floodNow = { k: Math.max(0, kMax + 1), n };
+    const W = [0, 0, 0];
+    for (let i = 0; i < N; i++) {
+      const u = i / N, x = (i + 0.5) / N * L, d = Math.abs(x - x0);
+      idealWater(u, Tr, Cr, W);
+      let m = n > 0 ? 0.1 : 0;                               // a faint red tint around the mill in a flooding month
+      for (let k = kMin; k <= kMax; k++) {
+        const age = t - (k + 0.5) * every;
+        if (age < 0 || age > life) continue;
+        const rr = Math.min(reach, age * v);                 // how far this surge has spread
+        const q = (d - rr) / 0.08;
+        const inside = d <= rr ? 1 : Math.exp(-q * q);
+        const front = Math.exp(-q * q) * (1 - smooth01(age / rise)) * 0.5;   // bright leading edge
+        const fade = age < rise ? 1 : 1 - smooth01((age - rise) / drain);
+        m = Math.max(m, Math.min(1, 0.8 * inside + front) * fade);
+      }
+      m *= smooth01((reach + 0.075 - d) / 0.15);             // nothing beyond the reach
+      out.r[i] = mix(W[0], C[0], m);
+      out.g[i] = mix(W[1], C[1], m);
+      out.b[i] = mix(W[2], C[2], m);
+    }
+  };
+}
+
+// Sewage part: 8 pollution points discharging like ink poured into water
+const SEWAGE_POINTS = 8, MAX_PLUMES = 48;
+const dischargeCount = (T, first, every) => (T < first ? 0 : every > 0 ? Math.floor((T - first) / every) + 1 : 1);
+function makeSewage() {
+  let lastT = -1, muck = 0, plumes = [];
+  return function (t, dt, out) {
+    const s = settings[2], L = stripLength;
+    let prevT = lastT;
+    if (lastT < 0 || t < lastT) { plumes = []; muck = 0; prevT = t; }
+    lastT = t;
+    // 1. discharges: each point on its own rhythm (0 = only once)
+    for (let k = 0; k < SEWAGE_POINTS; k++) {
+      const first = 2 + hash01(k + 11) * 8, every = s['e' + (k + 1)];
+      const n = Math.min(2, dischargeCount(t, first, every) - dischargeCount(prevT, first, every));
+      for (let j = 0; j < n; j++) {
+        if (plumes.length < MAX_PLUMES) plumes.push({ x: s['p' + (k + 1)] / 100, age: 0 });
+        muck = Math.min(0.75, muck + 0.07 * s.muckiness / 100);
+      }
+    }
+    // 2. the ink drifts with the river, spreads and fades; the muck slowly settles
+    muck *= Math.exp(-dt / 90);
+    const v = FLOW * L;
+    for (const p of plumes) { p.age += dt; p.x += v * flowDirAt(p.x / L) * dt; }
+    plumes = plumes.filter(p => p.age < 40 && p.x > -1 && p.x < L + 1);
+    // 3. colours
+    const Ink = hexToRgb(s.inkColour), Mk = hexToRgb(s.muckColour);
+    const Tr = hexToRgb(settings[0].troughColour), Cr = hexToRgb(settings[0].crestColour);
+    const W = [0, 0, 0];
+    for (let i = 0; i < N; i++) {
+      const u = i / N, x = (i + 0.5) / N * L;
+      const wave = idealWater(u, Tr, Cr, W);
+      const mk = muck * (0.75 + 0.25 * Math.sin(2 * Math.PI * (x / 0.9 - riverClock * 13 / 600)));
+      let r = mix(W[0], Mk[0], mk), g = mix(W[1], Mk[1], mk), b = mix(W[2], Mk[2], mk);
+      let conc = 0, cr = 0, cg = 0, cb = 0;
+      for (const p of plumes) {
+        const w = 0.12 + 0.03 * p.age, q = (x - p.x) / w;
+        if (q < -3 || q > 3) continue;
+        const c = 1.8 * Math.pow(0.12 / w, 0.7) * Math.exp(-p.age / 25) * Math.exp(-q * q) * (0.75 + 0.25 * wave);
+        const k = smooth01(p.age / 12);                      // fresh ink turns murky as it spreads
+        conc += c; cr += c * mix(Ink[0], Mk[0], k); cg += c * mix(Ink[1], Mk[1], k); cb += c * mix(Ink[2], Mk[2], k);
+      }
+      if (conc > 0) { const a = Math.min(1, conc); r = mix(r, cr / conc, a); g = mix(g, cg / conc, a); b = mix(b, cb / conc, a); }
+      out.r[i] = r; out.g[i] = g; out.b[i] = b;
+    }
+  };
+}
+
+// 3. FLOODING & SEWAGE: each part has its own start and end time within the animation.
+//    Where they overlap, the flooding fades out while the sewage builds up.
+// How much of a part shows at time t: fades in after its start, fades out before its end
+function partWindow(t, a, b, fadeIn, fadeOut) {
+  if (t < a || t > b) return 0;
+  fadeIn = Math.min(fadeIn, (b - a) * 0.5); fadeOut = Math.min(fadeOut, (b - a) * 0.5);
+  return (fadeIn > 0 ? smooth01((t - a) / fadeIn) : 1) * (fadeOut > 0 ? 1 - smooth01((t - (b - fadeOut)) / fadeOut) : 1);
+}
+function makeFloodSewage() {
+  const flood = makeFlood(), sewage = makeSewage();
+  let A = null, B = null, lastT = -1;
+  return function (t, dt, out) {
+    const s = settings[2];
+    if (lastT < 0) holdMonth = false;                       // first run: play the month shown
+    else if (t < lastT - 0.5) {                             // starting again: move on to the next month
+      if (holdMonth) holdMonth = false;
+      else { piece.month = (piece.month + 1) % 12; updateMonthUI(); }
+    }
+    lastT = t;
+    if (!A || A.r.length !== N) {
+      const mk = () => ({ r: new Float32Array(N), g: new Float32Array(N), b: new Float32Array(N) });
+      A = mk(); B = mk();
+    }
+    const len = s.length;
+    const fS = Math.min(s.floodStart, len - 1), fE = Math.min(Math.max(s.floodEnd, fS + 1), len);
+    const sS = Math.min(s.sewageStart, len - 1), sE = Math.min(Math.max(s.sewageEnd, sS + 1), len);
+    const ov = Math.max(0, Math.min(fE, sE) - Math.max(fS, sS));          // how long the two overlap
+    const kf = partWindow(t, fS, fE, fS > 0 ? 3 : 0, fE >= len ? 0 : 3);   // full strength until just before it ends
+    const ks = partWindow(t, sS, sE, sS > 0 ? Math.max(3, ov * 0.6) : 0, sE >= len ? 0 : 3);
+    if (kf > 0) flood(t - fS, dt, A, fE - fS);              // floods spread over the whole flooding time
+    if (ks > 0) sewage(t - sS, dt, B);
+    fsStatus = shortMonth(piece.month) + ': ' + (kf > 0 ? (floodNow.n ? 'flood ' + floodNow.k + ' of ' + floodNow.n : 'no floods this month') : ks > 0 ? 'sewage' : 'river');
+    const Tr = hexToRgb(settings[0].troughColour), Cr = hexToRgb(settings[0].crestColour), W = [0, 0, 0];
+    for (let i = 0; i < N; i++) {
+      idealWater(i / N, Tr, Cr, W);
+      let r = W[0], g = W[1], b = W[2];
+      if (kf > 0) { r += (A.r[i] - W[0]) * kf; g += (A.g[i] - W[1]) * kf; b += (A.b[i] - W[2]) * kf; }
+      if (ks > 0) { r += (B.r[i] - W[0]) * ks; g += (B.g[i] - W[1]) * ks; b += (B.b[i] - W[2]) * ks; }
+      out.r[i] = Math.max(0, Math.min(255, r));
+      out.g[i] = Math.max(0, Math.min(255, g));
+      out.b[i] = Math.max(0, Math.min(255, b));
+    }
+  };
+}
+
+// 4. REWILDING: green appears just after House Mill, clean waves arrive from both ends, back to RIVER
+function makeRewild() {
+  return function (t, dt, out) {
+    const s = settings[3], L = stripLength, mill = millU() * L;
+    const Mk = hexToRgb(settings[2].muckColour), Gc = hexToRgb(s.plantColour);
+    const Tr = hexToRgb(settings[0].troughColour), Cr = hexToRgb(settings[0].crestColour);
+    const startMuck = s.startPollution / 100;
+    const prog = smooth01((t - 3) / 42);                     // the clean waves take about 42 s to reach the mill
+    const fl = mill * prog, fr = L - (L - mill) * prog;      // where the two clean fronts are (m)
+    const allClean = smooth01((t - 45) / 8);
+    const glowOn = prog > 0 ? 1 - smooth01((t - 45) / 5) : 0;
+    const back = 1 - smooth01((t - 40) / 15);                // plants fade as the river returns to normal
+    const n = Math.round(s.plants), area = s.area / 100, size = s.size / 100;
+    const pos = [], rad = [], bright = [];
+    for (let k = 0; k < n; k++) {
+      const age = t - (4 + hash01(k + 61) * 20);             // planted between 4 s and 24 s
+      if (age < 0) continue;
+      const grow = smooth01(age / 10);
+      pos.push(mill + hash01(k + 81) * area);
+      rad.push(0.03 + grow * size);
+      bright.push((0.35 + 0.65 * grow) * (0.85 + 0.15 * Math.sin(t * 1.3 + k)));
+    }
+    const W = [0, 0, 0];
+    for (let i = 0; i < N; i++) {
+      const u = i / N, x = (i + 0.5) / N * L;
+      idealWater(u, Tr, Cr, W);
+      let clean = x < mill ? smooth01((fl - x) / 0.6 + 0.5) : smooth01((x - fr) / 0.6 + 0.5);
+      clean = Math.max(clean, allClean);
+      const dirt = startMuck * (1 - clean) * (0.8 + 0.2 * Math.sin(2 * Math.PI * (x / 0.9 - riverClock * 13 / 600)));
+      let r = mix(W[0], Mk[0], dirt), g = mix(W[1], Mk[1], dirt), b = mix(W[2], Mk[2], dirt);
+      const qf = x < mill ? (x - fl) / 0.3 : (x - fr) / 0.3;  // the arriving clean waves glow a little
+      const glow = 0.5 * glowOn * Math.exp(-qf * qf);
+      r = mix(r, Cr[0], glow); g = mix(g, Cr[1], glow); b = mix(b, Cr[2], glow);
+      let m = 0;
+      for (let k = 0; k < pos.length; k++) {
+        const q = (x - pos[k]) / rad[k];
+        if (q > -3 && q < 3) m = Math.max(m, bright[k] * Math.exp(-q * q));
+      }
+      m *= back;
+      out.r[i] = mix(r, Gc[0], m);
+      out.g[i] = mix(g, Gc[1], m);
+      out.b[i] = mix(b, Gc[2], m);
+    }
+  };
+}
+
+// =====================================================================
+//  ANIMATION LIST AND THEIR SETTINGS
+//  Each extra setting: type 'range' or 'color', the name used in the
+//  Arduino code (code), and how it is shown (show) and written (cval).
+// =====================================================================
+const PCT   = { show: v => v + '%',                 cval: v => (v / 100).toFixed(2) + 'f', ctype: 'float' };
+const TIMES = { show: v => v.toFixed(2) + '\u00d7', cval: v => v.toFixed(2) + 'f',         ctype: 'float' };
+const CM    = { show: v => v + ' cm',               cval: v => v.toFixed(1) + 'f',         ctype: 'float' };
+const SECS  = { show: v => v + ' s',                cval: v => v.toFixed(1) + 'f',         ctype: 'float' };
+const EVERY = { show: v => (v === 0 ? 'once' : v + ' s'), cval: v => v.toFixed(1) + 'f',   ctype: 'float' };
+const COUNT = { show: v => String(v),               cval: v => String(Math.round(v)),      ctype: 'int' };
+const COLOUR = { type: 'color', show: v => v, cval: v => { const c = hexToRgb(v); return 'CRGB(' + c.join(', ') + ')'; }, ctype: 'CRGB' };
+const ALONG = () => Math.round(stripLength * 100);       // position sliders go along the whole strip
+
+const SEWAGE_DEFAULT_POS = [70, 190, 300, 420, 560, 660, 780, 900];
+const SEWAGE_DEFAULT_EVERY = [6, 12, 0, 18, 9, 0, 25, 14];
+const sewagePointExtras = [];
+for (let k = 0; k < SEWAGE_POINTS; k++) {
+  sewagePointExtras.push({ key: 'p' + (k + 1), label: 'Point ' + (k + 1) + ' position', type: 'range', min: 0, max: ALONG, step: 5, def: SEWAGE_DEFAULT_POS[k], code: 'SEWAGE_P' + (k + 1) + '_CM', ...CM });
+  sewagePointExtras.push({ key: 'e' + (k + 1), label: 'Point ' + (k + 1) + ' discharges every', type: 'range', min: 0, max: 60, step: 1, def: SEWAGE_DEFAULT_EVERY[k], code: 'SEWAGE_E' + (k + 1), ...EVERY });
+}
+
+const ANIMS = [
+  { name: 'RIVER', desc: 'The ideal river: dark troughs, paler crests and sun glitter, flowing towards House Mill.', make: makeRiver,
+    extras: [
+      { key: 'troughColour',  label: 'Dark water (troughs)', def: '#0a1c5c', code: 'RIVER_TROUGH_COLOUR', ...COLOUR },
+      { key: 'crestColour',   label: 'Wave tops (crests)',   def: '#5f8fd8', code: 'RIVER_CREST_COLOUR', ...COLOUR },
+      { key: 'twinkleAmount', label: 'Amount of twinkle', type: 'range', min: 0, max: 100, step: 1, def: 40, code: 'RIVER_TWINKLE_AMOUNT', ...PCT },
+      { key: 'twinkleSpeed',  label: 'Speed of twinkles', type: 'range', min: 0.25, max: 3, step: 0.05, def: 1, code: 'RIVER_TWINKLE_SPEED', ...TIMES },
+      { key: 'twinkleColour', label: 'Twinkle colour', def: '#fff0d7', code: 'RIVER_TWINKLE_COLOUR', ...COLOUR },
+      { key: 'irregular',     label: 'Wave irregularity', type: 'range', min: 0, max: 100, step: 1, def: 0, code: 'RIVER_IRREGULARITY', ...PCT }
+    ] },
+  { name: 'RIVER 2', desc: 'Realistic layered waves in a deeper blue-green, with a green shallows. Longer waves travel faster, like real water.', make: makeRiver2,
+    extras: [
+      { key: 'troughColour',  label: 'Dark water (troughs)', def: '#03222e', code: 'R2_TROUGH_COLOUR', ...COLOUR },
+      { key: 'crestColour',   label: 'Wave tops (crests)',   def: '#2e8a8f', code: 'R2_CREST_COLOUR', ...COLOUR },
+      { key: 'spacing',       label: 'Gap between waves', type: 'range', min: 20, max: 600, step: 5, def: 200, code: 'R2_SPACING_CM', ...CM },
+      { key: 'layers',        label: 'Amount of waves (layers)', type: 'range', min: 1, max: 4, step: 1, def: 4, code: 'R2_LAYERS', ...COUNT },
+      { key: 'irregular',     label: 'Wave irregularity', type: 'range', min: 0, max: 100, step: 1, def: 30, code: 'R2_IRREGULARITY', ...PCT },
+      { key: 'shallowPos',    label: 'Green shallows position', type: 'range', min: 0, max: ALONG, step: 5, def: 750, code: 'R2_SHALLOW_CM', ...CM },
+      { key: 'shallowWidth',  label: 'Green shallows width', type: 'range', min: 10, max: 300, step: 5, def: 80, code: 'R2_SHALLOW_WIDTH_CM', ...CM },
+      { key: 'shallowAmount', label: 'How green', type: 'range', min: 0, max: 100, step: 1, def: 60, code: 'R2_SHALLOW_AMOUNT', ...PCT },
+      { key: 'shallowColour', label: 'Shallows colour', def: '#3f8f4a', code: 'R2_SHALLOW_COLOUR', ...COLOUR },
+      { key: 'twinkleAmount', label: 'Amount of twinkle', type: 'range', min: 0, max: 100, step: 1, def: 5, code: 'R2_TWINKLE_AMOUNT', ...PCT },
+      { key: 'twinkleSpeed',  label: 'Speed of twinkles', type: 'range', min: 0.25, max: 3, step: 0.05, def: 1, code: 'R2_TWINKLE_SPEED', ...TIMES },
+      { key: 'twinkleColour', label: 'Twinkle colour', def: '#dff2ee', code: 'R2_TWINKLE_COLOUR', ...COLOUR }
+    ] },
+  { name: 'FLOODING & SEWAGE', desc: 'Flooding around House Mill, then sewage from eight pollution points. Set when each part starts and ends (seconds from the start of this animation); where they overlap, the flooding fades as the sewage builds.', make: makeFloodSewage,
+    extras: [
+      { type: 'heading', label: 'Timing' },
+      { key: 'length',      label: 'Length of this animation', type: 'range', min: 60, max: 180, step: 5, def: 90, code: 'FS_SECONDS', ...SECS },
+      { key: 'floodStart',  label: 'Flooding starts at', type: 'range', min: 0, max: 180, step: 5, def: 0, code: 'FLOOD_START', ...SECS },
+      { key: 'floodEnd',    label: 'Flooding ends at', type: 'range', min: 5, max: 180, step: 5, def: 50, code: 'FLOOD_END', ...SECS },
+      { key: 'sewageStart', label: 'Sewage starts at', type: 'range', min: 0, max: 180, step: 5, def: 40, code: 'SEWAGE_START', ...SECS },
+      { key: 'sewageEnd',   label: 'Sewage ends at', type: 'range', min: 5, max: 180, step: 5, def: 90, code: 'SEWAGE_END', ...SECS },
+      { type: 'months' },
+      { type: 'heading', label: 'Flooding' },
+      { key: 'reach',       label: 'Reach each side of House Mill', type: 'range', min: 10, max: 200, step: 5, def: 50, code: 'FLOOD_REACH_CM', ...CM },
+      { key: 'drain',       label: 'Each flood fades away over', type: 'range', min: 0.5, max: 10, step: 0.5, def: 2.5, code: 'FLOOD_DRAIN_SECONDS', ...SECS },
+      { key: 'spread',      label: 'Surge speed (cm per second)', type: 'range', min: 10, max: 150, step: 5, def: 40, code: 'FLOOD_SPREAD_CM', ...CM },
+      { key: 'floodColour', label: 'Flood colour', def: '#ff1a0a', code: 'FLOOD_COLOUR', ...COLOUR },
+      { type: 'heading', label: 'Sewage' },
+      { key: 'inkColour',  label: 'Fresh pollution colour', def: '#8a4512', code: 'SEWAGE_INK_COLOUR', ...COLOUR },
+      { key: 'muckColour', label: 'Murky water colour', def: '#5c5a1c', code: 'SEWAGE_MUCK_COLOUR', ...COLOUR },
+      { key: 'muckiness',  label: 'How mucky it gets', type: 'range', min: 0, max: 100, step: 1, def: 60, code: 'SEWAGE_MUCKINESS', ...PCT }
+    ].concat(sewagePointExtras) },
+  { name: 'REWILDING', desc: 'Green appears just after House Mill while clean blue waves arrive from both ends, reversing the pollution back to the ideal RIVER.', make: makeRewild,
+    extras: [
+      { key: 'startPollution', label: 'Pollution at the start', type: 'range', min: 0, max: 100, step: 1, def: 55, code: 'REWILD_START_POLLUTION', ...PCT },
+      { key: 'plants',      label: 'Number of plants', type: 'range', min: 3, max: 60, step: 1, def: 20, code: 'REWILD_PLANTS', ...COUNT },
+      { key: 'area',        label: 'Planting area after the mill', type: 'range', min: 20, max: 400, step: 5, def: 120, code: 'REWILD_AREA_CM', ...CM },
+      { key: 'size',        label: 'How big they grow', type: 'range', min: 3, max: 50, step: 1, def: 12, code: 'REWILD_SIZE_CM', ...CM },
+      { key: 'plantColour', label: 'Plant colour', def: '#2ee65a', code: 'REWILD_COLOUR', ...COLOUR }
+    ] }
+];
+let effects = ANIMS.map(a => a.make());
+
+function defaultSettings(id) {
+  const s = { light: 100, speed: 1.0 };
+  (ANIMS[id].extras || []).forEach(x => { if (x.key) s[x.key] = x.def; });
+  return s;
+}
+let settings = ANIMS.map((_, id) => defaultSettings(id));
+let order = [0, 1, 2, 3];           // animation ids in playing order
+let selected = 0;                   // animation id being edited
+
+// =====================================================================
+//  PLAYBACK
+// =====================================================================
+let playing = true;
+let mode = 'sequence';              // 'sequence' or 'single'
+let seqTime = 0;                    // seconds into the whole loop
+let singleTime = 0;
+let lastFrame = 0;
+
+let bufA, bufB, final;
+function makeBuffers() {
+  const mk = () => ({ r: new Float32Array(N), g: new Float32Array(N), b: new Float32Array(N) });
+  bufA = mk(); bufB = mk(); final = mk();
+}
+makeBuffers();
+
+function renderAnim(id, localT, dt, out) {
+  const s = settings[id];
+  effects[id](localT * s.speed, dt * s.speed, out);
+  const k = s.light / 100;
+  for (let i = 0; i < N; i++) { out.r[i] *= k; out.g[i] *= k; out.b[i] *= k; }
+}
+
+function currentPosition() {
+  let start = 0, pos = 0;
+  while (pos < order.length - 1 && seqTime >= start + animSeconds(order[pos])) { start += animSeconds(order[pos]); pos++; }
+  return { pos, local: seqTime - start, dur: animSeconds(order[pos]) };
+}
+
+function step(dt) {
+  advanceRiver(dt);                 // the shared river keeps flowing whatever is playing
+  if (mode === 'single') {
+    singleTime = wrapTo(singleTime + dt, animSeconds(selected));
+    renderAnim(selected, singleTime, dt, final);
+    return;
+  }
+  const cycle = cycleSeconds();
+  seqTime += dt;
+  if (seqTime >= cycle) seqTime = wrapTo(seqTime, cycle);
+  const { pos, local, dur } = currentPosition();
+  const cur = order[pos], nxt = order[(pos + 1) % order.length];
+  const inLen = transLen((pos + order.length - 1) % order.length);   // the transition that brought this one in
+  const len = transLen(pos);                                          // the transition out of this one
+  renderAnim(cur, local + inLen, dt, bufA);
+  if (local >= dur - len) {
+    const nt = local - (dur - len);
+    renderAnim(nxt, nt, dt, bufB);
+    const p = nt / len, type = transitions[pos].type;
+    for (let i = 0; i < N; i++) transitionPixel(type, p, i);
+  } else {
+    final.r.set(bufA.r); final.g.set(bufA.g); final.b.set(bufA.b);
+  }
+}
+
+// =====================================================================
+//  DRAWING THE STRIP
+// =====================================================================
+const canvas = document.getElementById('strip');
+const ctx = canvas.getContext('2d');
+const off = document.createElement('canvas');
+const offCtx = off.getContext('2d');
+let img = null;
+let hoverIdx = -1;
+
+const LED_HEIGHT = 5;   // how thick the LEDs are drawn on screen, in pixels: change this to make them thicker or thinner
+let ledSize = LED_HEIGHT;
+function sizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth;
+  ledSize = Math.max(LED_HEIGHT, cssW / N);        // LED height on screen (never thinner than LED_HEIGHT)
+  const cssH = Math.round(ledSize + 16);           // a little space above and below for the glow
+  canvas.style.height = cssH + 'px';
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  off.width = N; off.height = 1;
+  img = offCtx.createImageData(N, 1);
+}
+
+function draw() {
+  const d = img.data;
+  for (let i = 0; i < N; i++) {
+    d[i * 4]     = final.r[i];
+    d[i * 4 + 1] = final.g[i];
+    d[i * 4 + 2] = final.b[i];
+    d[i * 4 + 3] = 255;
+  }
+  offCtx.putImageData(img, 0, 0);
+
+  const W = canvas.width, H = canvas.height;
+  const dpr = window.devicePixelRatio || 1;
+  const barH = ledSize * dpr, barY = (H - barH) / 2;
+  ctx.clearRect(0, 0, W, H);
+  ctx.imageSmoothingEnabled = false;
+
+  // soft glow behind the LEDs
+  ctx.save();
+  ctx.filter = 'blur(' + Math.max(2, Math.round(barH * 0.9)) + 'px)';
+  ctx.globalAlpha = 0.85;
+  ctx.drawImage(off, 0, barY - barH * 0.5, W, barH * 2);
+  ctx.restore();
+
+  // the LEDs themselves
+  ctx.drawImage(off, 0, barY, W, barH);
+
+  // thin gaps between LEDs when there is room to see them
+  const ledW = W / N;
+  if (ledW >= 3) {
+    ctx.fillStyle = 'rgba(2,6,23,0.55)';
+    for (let i = 1; i < N; i++) ctx.fillRect(Math.round(i * ledW), barY, 1, barH);
+  }
+
+  // House Mill marker
+  const mx = Math.round(millU() * W), mw = Math.max(1, Math.round(dpr));
+  ctx.fillStyle = 'rgba(124, 196, 180, 0.9)';
+  ctx.fillRect(mx - Math.floor(mw / 2), 0, mw, H);
+
+  // hovered LED outline
+  if (hoverIdx >= 0) {
+    ctx.strokeStyle = '#e6e8ea'; ctx.lineWidth = Math.max(1, dpr);
+    ctx.strokeRect(hoverIdx * ledW, barY - 3, Math.max(ledW, 2), barH + 6);
+  }
+
+}
+
+// Hover: LED number and distance
+const tip = document.getElementById('tip');
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  hoverIdx = Math.max(0, Math.min(N - 1, Math.floor(x / rect.width * N)));
+  const cm = Math.round((hoverIdx + 0.5) / N * stripLength * 100);
+  let extra = '';
+  const hw = HARDWARE[hwKey];
+  if (hw.split) {
+    const onStrip2 = hoverIdx >= hw.split;
+    extra = '<br>Strip ' + (onStrip2 ? 2 : 1) + ' (pin ' + hw.pins[onStrip2 ? 1 : 0] + '), LED ' + (onStrip2 ? hoverIdx - hw.split : hoverIdx);
+  }
+  tip.innerHTML = '<b>LED ' + hoverIdx + '</b><br>' + cm + ' cm from the left' + extra;
+  tip.style.left = Math.max(70, Math.min(rect.width - 70, x)) + 'px';
+  tip.style.display = 'block';
+});
+canvas.addEventListener('mouseleave', () => { hoverIdx = -1; tip.style.display = 'none'; });
+
+// Distance ruler under the strip
+function buildRuler() {
+  const ruler = document.getElementById('ruler');
+  ruler.innerHTML = '';
+  const steps = [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 5, 10, 20, 50, 100];
+  const major = steps.find(s => stripLength / s <= 12) || 100;
+  const minor = major / 5;
+  const fmt = v => (Math.round(v * 100) / 100) + ' m';
+  for (let v = 0; v <= stripLength + 1e-9; v += minor) {
+    const isMajor = Math.abs(v / major - Math.round(v / major)) < 1e-6;
+    const pct = v / stripLength * 100;
+    const m = document.createElement('div');
+    m.className = 'tick-mark' + (isMajor ? '' : ' minor');
+    m.style.left = pct + '%';
+    ruler.appendChild(m);
+    if (isMajor && pct < 97) {
+      const l = document.createElement('div');
+      l.className = 'tick-label';
+      l.style.left = pct + '%';
+      l.textContent = fmt(v);
+      ruler.appendChild(l);
+    }
+  }
+  const end = document.createElement('div');
+  end.className = 'tick-label';
+  end.style.left = '100%'; end.style.transform = 'translateX(-100%)';
+  end.textContent = fmt(stripLength);
+  ruler.appendChild(end);
+  const millLabel = document.createElement('div');
+  millLabel.className = 'tick-label mill-label';
+  millLabel.style.left = (millU() * 100) + '%';
+  millLabel.textContent = 'House Mill';
+  ruler.appendChild(millLabel);
+}
+
+// =====================================================================
+//  LEFT COLUMN: sequence list
+// =====================================================================
+const fmtTime = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+
+function renderList() {
+  const list = document.getElementById('animList');
+  list.innerHTML = '';
+  order.forEach((id, pos) => {
+    const s = settings[id];
+    const row = document.createElement('div');
+    row.className = 'anim-row' + (id === selected ? ' selected' : '');
+    row.dataset.id = id;
+    const opts = order.map((_, p) => '<option value="' + p + '"' + (p === pos ? ' selected' : '') + '>' + (p + 1) + '</option>').join('');
+    row.innerHTML =
+      '<div class="tickbox"></div>' +
+      '<div class="anim-main">' +
+        '<div class="anim-name">' + (pos + 1) + '. ' + ANIMS[id].name + ' <span class="now">playing</span></div>' +
+        '<div class="anim-meta"><span>' + fmtTime(animSeconds(id)) + '</span>' +
+          (id === 2 ? '<span id="fsMonth">' + shortMonth(piece.month) + ': ' + piece.floodCounts[piece.month] + ' floods</span>' : '') + '<span>light ' + s.light + '%</span><span>speed ' + s.speed.toFixed(2) + '&times;</span></div>' +
+        '<div class="prog"><div class="prog-fill" id="prog-' + id + '"></div></div>' +
+      '</div>' +
+      '<select class="pos-select" title="Change position in the sequence">' + opts + '</select>';
+    row.addEventListener('click', e => {
+      if (e.target.tagName === 'SELECT' || e.target.tagName === 'OPTION') return;
+      selectAnim(id);
+    });
+    row.querySelector('select').addEventListener('change', e => {
+      const newPos = parseInt(e.target.value, 10);
+      const oldPos = order.indexOf(id);
+      [order[oldPos], order[newPos]] = [order[newPos], order[oldPos]];   // swap places
+      renderList(); updateCode(['PLAY_ORDER']);
+    });
+    list.appendChild(row);
+
+    // transition row after this animation
+    const tr = transitions[pos];
+    const toPos = (pos + 1) % order.length;
+    const trow = document.createElement('div');
+    trow.className = 'trans-row';
+    trow.id = 'trans-' + pos;
+    const typeOpts = TRANSITION_TYPES.map(t => '<option value="' + t.id + '"' + (t.id === tr.type ? ' selected' : '') + '>' + t.name + '</option>').join('');
+    const lenOpts = TRANSITION_LENGTHS.map(l => '<option value="' + l + '"' + (l === tr.len ? ' selected' : '') + '>' + l + ' s</option>').join('');
+    trow.innerHTML =
+      '<span class="t-label">into ' + (toPos + 1) + '</span>' +
+      '<select class="t-type" title="Transition type">' + typeOpts + '</select>' +
+      '<select class="t-len" title="Transition length">' + lenOpts + '</select>' +
+      '<button class="mini" title="Jump to just before this transition">Watch</button>';
+    trow.querySelector('.t-type').addEventListener('change', e => {
+      tr.type = parseInt(e.target.value, 10);
+      updateCode(['TRANS_TYPE']);
+    });
+    trow.querySelector('.t-len').addEventListener('change', e => {
+      tr.len = parseFloat(e.target.value);
+      updateCode(['TRANS_SECONDS']);
+    });
+    trow.querySelector('.mini').addEventListener('click', () => watchTransition(pos));
+    list.appendChild(trow);
+  });
+  lastPlayingId = -1;   // re-apply the now-playing highlight
+}
+
+// Jump to 3 seconds before a transition starts, in whole-sequence mode
+function watchTransition(pos) {
+  setMode('sequence');
+  if (!playing) { playing = true; updatePlayButton(); }
+  seqTime = startOf(pos) + Math.max(0, animSeconds(order[pos]) - transLen(pos) - 3);
+}
+
+// Clicking an animation ticks it for editing and plays it
+function selectAnim(id) {
+  selected = id;
+  if (mode === 'single') singleTime = 0;
+  else seqTime = startOf(order.indexOf(id));
+  if (!playing) { playing = true; updatePlayButton(); }
+  renderList(); renderSettings();
+}
+
+// =====================================================================
+//  MIDDLE COLUMN: settings
+// =====================================================================
+function renderSettings() {
+  const s = settings[selected];
+  const a = ANIMS[selected];
+  const panel = document.getElementById('settingsPanel');
+  const extrasHtml = (a.extras || []).map(x => {
+    if (x.type === 'heading') return '<div class="group-title">' + x.label + '</div>';
+    if (x.type === 'months') return monthsHtml();
+    if (x.type === 'color') {
+      return '<div class="control"><label>' + x.label + ' <span id="val-' + x.key + '">' + s[x.key] + '</span></label>' +
+             '<input type="color" data-extra="' + x.key + '" value="' + s[x.key] + '"></div>';
+    }
+    const max = typeof x.max === 'function' ? x.max() : x.max;
+    return '<div class="control"><label>' + x.label + ' <span id="val-' + x.key + '">' + x.show(s[x.key]) + '</span></label>' +
+           '<input type="range" data-extra="' + x.key + '" min="' + x.min + '" max="' + max + '" step="' + x.step + '" value="' + s[x.key] + '"></div>';
+  }).join('');
+
+  panel.innerHTML =
+    '<div class="set-title">' + a.name + '</div>' +
+    '<div class="set-desc">' + a.desc + '</div>' +
+    '<div class="control"><label>Light <span id="lightVal">' + s.light + '%</span></label>' +
+      '<input type="range" id="lightSlider" min="0" max="100" step="1" value="' + s.light + '"></div>' +
+    '<div class="control"><label>Speed <span id="speedVal">' + s.speed.toFixed(2) + '&times;</span></label>' +
+      '<input type="range" id="speedSlider" min="0.1" max="3" step="0.05" value="' + s.speed + '"></div>' +
+    '<div class="group-title">House Mill (the same in every animation)</div>' +
+    '<div class="control"><label>House Mill position <span id="millVal">' + piece.millCm + ' cm</span></label>' +
+      '<input type="range" id="millSlider" min="0" max="' + ALONG() + '" step="5" value="' + piece.millCm + '"></div>' +
+    '<div class="control"><label>Left of the mill: direction changes <span id="tideVal">' + piece.tideChanges + ' per min</span></label>' +
+      '<input type="range" id="tideSlider" min="0" max="30" step="0.5" value="' + piece.tideChanges + '"></div>' +
+    '<div class="note" style="margin-top:-0.4rem;margin-bottom:0.4rem">Left of the mill the waves flow towards it, then away from it. Right of the mill they always flow towards it.</div>' +
+    (extrasHtml ? (a.extras[0].type === 'heading' ? '' : '<div class="group-title">Settings for ' + a.name + '</div>') + extrasHtml : '') +
+    '<div class="set-actions">' +
+      '<button class="btn" id="previewBtn">Preview only this one</button>' +
+      '<button class="btn" id="resetBtn">Reset</button>' +
+    '</div>';
+
+  panel.querySelector('#lightSlider').addEventListener('input', e => {
+    s.light = parseInt(e.target.value, 10);
+    panel.querySelector('#lightVal').textContent = s.light + '%';
+    renderList(); updateCode(['LIGHT']);
+  });
+  panel.querySelector('#speedSlider').addEventListener('input', e => {
+    s.speed = parseFloat(e.target.value);
+    panel.querySelector('#speedVal').innerHTML = s.speed.toFixed(2) + '&times;';
+    renderList(); updateCode(['SPEED']);
+  });
+  panel.querySelector('#millSlider').addEventListener('input', e => {
+    setMill(parseFloat(e.target.value));
+    panel.querySelector('#millVal').textContent = piece.millCm + ' cm';
+  });
+  panel.querySelector('#tideSlider').addEventListener('input', e => {
+    setTide(parseFloat(e.target.value));
+    panel.querySelector('#tideVal').textContent = piece.tideChanges + ' per min';
+  });
+  panel.querySelectorAll('[data-extra]').forEach(el => el.addEventListener('input', e => {
+    const x = a.extras.find(k => k.key === e.target.dataset.extra);
+    s[x.key] = x.type === 'color' ? e.target.value : parseFloat(e.target.value);
+    panel.querySelector('#val-' + x.key).textContent = x.show(s[x.key]);
+    if (x.key === 'length') { seqTime = wrapTo(seqTime, cycleSeconds()); renderList(); }
+    updateCode([x.code, 'ANIM_SECONDS']);
+  }));
+  panel.querySelectorAll('.month-btn').forEach(el => el.addEventListener('click', () => {
+    piece.month = parseInt(el.dataset.month, 10);
+    holdMonth = true;
+    selectAnim(2);                                    // play FLOODING & SEWAGE from the start, for this month
+    updateCode(['START_MONTH']);
+  }));
+  panel.querySelectorAll('.month-count').forEach(el => el.addEventListener('input', () => {
+    const v = parseInt(el.value, 10);
+    piece.floodCounts[parseInt(el.dataset.month, 10)] = isNaN(v) ? 0 : Math.max(0, Math.min(60, v));
+    updateMonthUI(); updateCode(['FLOOD_EVENTS']);
+  }));
+  panel.querySelector('#previewBtn').addEventListener('click', () => setMode('single'));
+  panel.querySelector('#resetBtn').addEventListener('click', () => {
+    settings[selected] = defaultSettings(selected);
+    renderSettings(); renderList();
+    seqTime = wrapTo(seqTime, cycleSeconds());
+    updateCode(['LIGHT', 'SPEED', 'ANIM_SECONDS'].concat((a.extras || []).filter(x => x.code).map(x => x.code)));
+  });
+}
+
+// Month buttons with the number of flood events for each month
+function monthsHtml() {
+  const cells = MONTHS.map((name, m) =>
+    '<div class="month">' +
+      '<button class="month-btn' + (m === piece.month ? ' on' : '') + '" data-month="' + m + '" title="Play ' + name + '">' + shortMonth(m) + '</button>' +
+      '<input type="number" class="month-count" data-month="' + m + '" min="0" max="60" step="1" value="' + piece.floodCounts[m] + '" aria-label="Flood events in ' + name + '">' +
+    '</div>').join('');
+  return '<div class="group-title">Flood events per month (touching floorboards)</div>' +
+    '<div class="months">' + cells + '</div>' +
+    '<div class="note month-now" id="monthNow">' + monthNowText() + '</div>';
+}
+function monthNowText() {
+  const n = piece.floodCounts[piece.month];
+  return 'Now playing: <b>' + MONTHS[piece.month] + '</b>, ' + n + ' flood' + (n === 1 ? '' : 's') + '. Each time the sequence comes back to this animation, it moves on to the next month, and after December 2025 starts again at January 2025.';
+}
+function updateMonthUI() {
+  document.querySelectorAll('.month-btn').forEach(el => el.classList.toggle('on', parseInt(el.dataset.month, 10) === piece.month));
+  const now = document.getElementById('monthNow');
+  if (now) now.innerHTML = monthNowText();
+  const tag = document.getElementById('fsMonth');
+  if (tag) tag.textContent = shortMonth(piece.month) + ': ' + piece.floodCounts[piece.month] + ' floods';
+}
+
+// =====================================================================
+//  RIGHT COLUMN: generated Arduino code
+// =====================================================================
+function genSettingsBlock() {
+  const lines = [];
+  lines.push('const float   STRIP_LENGTH_M       = ' + stripLength.toFixed(2) + 'f;   // real length of the strip, in metres');
+  lines.push('const float   HOUSE_MILL_CM        = ' + piece.millCm.toFixed(1) + 'f;   // House Mill, from the left');
+  lines.push('const float   TIDE_CHANGES_PER_MIN = ' + piece.tideChanges.toFixed(1) + 'f;   // left of the mill: towards it, then away');
+  lines.push('// Flood events touching the floorboards, January to December 2025: one pulse each in FLOODING & SEWAGE');
+  lines.push('const uint8_t FLOOD_EVENTS[12]     = { ' + piece.floodCounts.join(', ') + ' };');
+  lines.push('const uint8_t START_MONTH          = ' + piece.month + ';      // 0 = January 2025; moves on one month each time round');
+  lines.push('const uint8_t PLAY_ORDER[NUM_ANIMS]    = { ' + order.join(', ') + ' };');
+  lines.push('const float   LIGHT[NUM_ANIMS]         = { ' + settings.map(s => (s.light / 100).toFixed(2) + 'f').join(', ') + ' };');
+  lines.push('const float   SPEED[NUM_ANIMS]         = { ' + settings.map(s => s.speed.toFixed(2) + 'f').join(', ') + ' };');
+  lines.push('const float   ANIM_SECONDS[NUM_ANIMS]  = { ' + ANIMS.map((_, id) => animSeconds(id).toFixed(1) + 'f').join(', ') + ' };   // length of each animation');
+  lines.push('// Transition after each position (the last one loops back to the first)');
+  lines.push('const uint8_t TRANS_TYPE[NUM_ANIMS]    = { ' + transitions.map(t => t.type).join(', ') + ' };');
+  lines.push('const float   TRANS_SECONDS[NUM_ANIMS] = { ' + transitions.map(t => t.len.toFixed(1) + 'f').join(', ') + ' };');
+  ANIMS.forEach((a, id) => {
+    lines.push('// ' + (id + 1) + '. ' + a.name);
+    a.extras.forEach(x => {
+      if (!x.code) return;
+      const type = (x.ctype + '      ').slice(0, 6);
+      lines.push('const ' + type + ' ' + (x.code + '                        ').slice(0, 24) + ' = ' + x.cval(settings[id][x.key]) + ';');
+    });
+  });
+  return lines.join('\n');
+}
+
+function genCode() {
+  const hw = HARDWARE[hwKey];
+  const names = ANIMS.map((a, i) => i + ' = ' + a.name).join(', ');
+
+  const hwBlock = hw.split
+    ? '// ----- Hardware: 1200 NeoPixel LEDs (WS2812) on 2 data pins -----\n' +
+      '#define NUM_LEDS      1200\n' +
+      '#define PIN_STRIP_1   ' + hw.pins[0] + '\n' +
+      '#define PIN_STRIP_2   ' + hw.pins[1] + '\n' +
+      '#define LEDS_STRIP_1  ' + hw.split + '    // the rest are on strip 2'
+    : '// ----- Hardware: 300 UltraLED clusters (UCS7604) on 1 data pin -----\n' +
+      '#define NUM_LEDS  300\n' +
+      '#define DATA_PIN  ' + hw.pins[0];
+
+  const neo = !!hw.split;           // 1200 NeoPixel: Adafruit NeoPixel, two strips (as the working test)
+  const B = Math.max(1, Math.min(255, Math.round(piece.brightness || 70)));
+  const WDT = neo ? 'USE_WATCHDOG && defined(ESP32)' : 'defined(ESP32)';
+
+  const includeBlock = neo ? [
+    '#include <Adafruit_NeoPixel.h>    // sends the colours to the strips (as the working test sketch)',
+    '',
+    '// Watchdog: restarts the board by itself if it ever freezes.',
+    '// Off (0) while testing. Change to 1 once everything works.',
+    '#define USE_WATCHDOG 0',
+    '#if USE_WATCHDOG && defined(ESP32)',
+    '#include <esp_task_wdt.h>',
+    '#endif'].join('\n') : [
+    '#include <FastLED.h>',
+    '#if defined(ESP32)',
+    '  #include <esp_task_wdt.h>     // watchdog: restarts the board if it ever freezes',
+    '#endif'].join('\n');
+
+  const hwBlockFull = neo ? [
+    '// ----- Hardware: ' + hw.leds + ' NeoPixel LEDs (WS2812) as two strips of ' + hw.split + ', on an ESP32-S3-Zero -----',
+    '#define PIN_STRIP_1       ' + hw.pins[0],
+    '#define PIN_STRIP_2       ' + hw.pins[1],
+    '#define NUM_LEDS_STRIP_1  ' + hw.split,
+    '#define NUM_LEDS_STRIP_2  ' + (hw.leds - hw.split),
+    '#define NUM_LEDS          (NUM_LEDS_STRIP_1 + NUM_LEDS_STRIP_2)   // the combined virtual array (' + hw.leds + ' LEDs)',
+    '',
+    '// Brightness (0 to 255). There is no automatic power limit, so check that the',
+    '// power supply and wires stay cool when you raise it.',
+    '#define BRIGHTNESS        ' + B].join('\n') :
+    hwBlock + '\n\n' + [
+    '#define POWER_VOLTS      5       // your power supply voltage',
+    '#define POWER_MILLIAMPS  4000    // about 75 percent of the supply rating',
+    '#define BRIGHTNESS       ' + B + '      // overall brightness, 0-255'].join('\n');
+
+  const colourBlock = neo ? '\n' + [
+    '// ---------------------------------------------------------------------',
+    '//  COLOURS: a small colour type, so the sketch does not need FastLED',
+    '// ---------------------------------------------------------------------',
+    'struct CRGB {',
+    '  uint8_t r, g, b;',
+    '  CRGB() : r(0), g(0), b(0) {}',
+    '  constexpr CRGB(uint8_t rr, uint8_t gg, uint8_t bb) : r(rr), g(gg), b(bb) {}',
+    '  CRGB& nscale8(uint8_t s) {                       // dim the colour (255 = unchanged)',
+    '    r = ((uint16_t)r * (s + 1)) >> 8; g = ((uint16_t)g * (s + 1)) >> 8; b = ((uint16_t)b * (s + 1)) >> 8;',
+    '    return *this;',
+    '  }',
+    '  CRGB operator|(const CRGB& o) const {            // the brighter of two colours, channel by channel',
+    '    return CRGB(r > o.r ? r : o.r, g > o.g ? g : o.g, b > o.b ? b : o.b);',
+    '  }',
+    '};',
+    '// Mix from colour a to colour b (amount 0 = all a, 255 = all b)',
+    'CRGB blend(CRGB a, CRGB b, uint8_t amount) {',
+    '  return CRGB(a.r + (((int)b.r - a.r) * amount) / 255, a.g + (((int)b.g - a.g) * amount) / 255, a.b + (((int)b.b - a.b) * amount) / 255);',
+    '}',
+    ''].join('\n') : '';
+
+  const stripBlock = neo ? '\n' + [
+    '// ---------------------------------------------------------------------',
+    '//  THE TWO PHYSICAL STRIPS (as in the working test sketch)',
+    '//  The animations draw on one virtual array of ' + hw.leds + ' LEDs. LEDs 0-' + (hw.split - 1) + ' go',
+    '//  to strip 1 and LEDs ' + hw.split + '-' + (hw.leds - 1) + ' go to strip 2.',
+    '// ---------------------------------------------------------------------',
+    'Adafruit_NeoPixel strip1(NUM_LEDS_STRIP_1, PIN_STRIP_1, NEO_GRB + NEO_KHZ800);',
+    'Adafruit_NeoPixel strip2(NUM_LEDS_STRIP_2, PIN_STRIP_2, NEO_GRB + NEO_KHZ800);',
+    '',
+    'void setVirtualPixel(int index, uint32_t color) {',
+    '  if (index < 0 || index >= NUM_LEDS) return;',
+    '  if (index < NUM_LEDS_STRIP_1) strip1.setPixelColor(index, color);',
+    '  else strip2.setPixelColor(index - NUM_LEDS_STRIP_1, color);',
+    '}',
+    '',
+    'void showAllStrips() {',
+    '  strip1.show();',
+    '  strip2.show();',
+    '}',
+    '',
+    'void clearAllStrips() {',
+    '  for (int i = 0; i < NUM_LEDS; i++) setVirtualPixel(i, 0);',
+    '  showAllStrips();',
+    '}',
+    ''].join('\n') : '';
+
+  const setupHw = neo ? [
+    '  Serial.begin(115200);',
+    '  delay(1500);                                    // time for the Serial Monitor to connect',
+    '  Serial.println("\\n=== Manifold animation starting ===");',
+    '  Serial.printf("Strip 1: pin %d, %d LEDs   Strip 2: pin %d, %d LEDs\\n", PIN_STRIP_1, NUM_LEDS_STRIP_1, PIN_STRIP_2, NUM_LEDS_STRIP_2);',
+    '',
+    '  // Start both strips (as the working test sketch)',
+    '  strip1.begin();',
+    '  strip1.setBrightness(BRIGHTNESS);',
+    '  strip2.begin();',
+    '  strip2.setBrightness(BRIGHTNESS);',
+    '  clearAllStrips();',
+    '  Serial.println("Strips started. Running the animation...");'].join('\n') : [
+    '  FastLED.addLeds<UCS7604, DATA_PIN, GRB>(leds, NUM_LEDS);',
+    '  FastLED.setMaxPowerInVoltsAndMilliamps(POWER_VOLTS, POWER_MILLIAMPS);',
+    '  FastLED.setBrightness(BRIGHTNESS);',
+    '  FastLED.clear();',
+    '  FastLED.show();'].join('\n');
+
+  const showBlock = neo ? [
+    '  // Send the frame to the two strips, through the virtual array',
+    '  for (int i = 0; i < NUM_LEDS; i++) setVirtualPixel(i, strip1.Color(leds[i].r, leds[i].g, leds[i].b));',
+    '  showAllStrips();',
+    '',
+    '  // Status report once a second (Tools > Serial Monitor, 115200)',
+    '  static unsigned long lastReport = 0, frames = 0;',
+    '  frames++;',
+    '  if (now - lastReport >= 1000) {',
+    '    const char* NAMES[NUM_ANIMS] = { ' + ANIMS.map(a => '"' + a.name + '"').join(', ') + ' };',
+    '    Serial.printf("%-18s %5.1f s into it | loop %6.1f s | %lu frames/s | first LED %3d,%3d,%3d\\n",',
+    '                  NAMES[cur], local, seqTime, frames, leds[0].r, leds[0].g, leds[0].b);',
+    '    frames = 0;',
+    '    lastReport = now;',
+    '  }'].join('\n') : '  FastLED.show();';
+
+  return `// =====================================================================
+//  LED INSTALLATION - generated by the Manifold Light Simulator
+//  Hardware: ${hw.label}${neo ? ' on an ESP32-S3-Zero, driven like the working test sketch (Adafruit NeoPixel)' : ''}
+//  ${ANIMS.length} animations, each with its own length, with a transition between each, looping forever.
+// =====================================================================
+
+${includeBlock}
+
+#ifndef PI
+  #define PI 3.14159265358979f
+#endif
+#ifndef TWO_PI
+  #define TWO_PI 6.28318530717959f
+#endif
+
+${hwBlockFull}
+
+// ----- Sequence -----
+#define NUM_ANIMS      ${ANIMS.length}
+${colourBlock}
+// Transition types
+#define T_FADE      0
+#define T_WIPE_LR   1
+#define T_WIPE_RL   2
+#define T_OVERLAY   3
+
+// ===== SETTINGS FROM THE SIMULATOR =====
+// Animations: ${names}
+${genSettingsBlock()}
+// =======================================
+
+CRGB leds[NUM_LEDS];
+CRGB bufA[NUM_LEDS];
+CRGB bufB[NUM_LEDS];
+${stripBlock}
+// ---------------------------------------------------------------------
+//  HELPERS
+// ---------------------------------------------------------------------
+float rand01() { return random(10000) / 10000.0f; }
+float clamp01(float x) { return x < 0 ? 0 : (x > 1 ? 1 : x); }
+float smooth01(float x) { x = clamp01(x); return x * x * (3.0f - 2.0f * x); }
+float fract01(float x) { return x - floorf(x); }
+float wrapTo(float x, float p) { return x - p * floorf(x / p); }
+float mixf(float a, float b, float k) { return a + (b - a) * k; }
+uint8_t cap255(float v) { return v <= 0 ? 0 : (v >= 255.0f ? 255 : (uint8_t)v); }
+
+// Repeatable "random" number 0-1 for a given whole number (same as the simulator)
+float hash01(uint32_t k) {
+  uint32_t h = k * 2654435761u;
+  h ^= h >> 16; h *= 2246822519u;
+  h ^= h >> 13; h *= 3266489917u;
+  h ^= h >> 16;
+  return (h & 0xFFFFFF) / 16777216.0f;
+}
+
+// Twinkles: one flash per LED that rises quickly and fades
+float glintStep(float &g, float &tg, float crest, float density, float rate,
+                float frameScale, float fade, float lively) {
+  if (tg > 0) {
+    g += (tg - g) * fminf(1.0f, 0.6f * frameScale * rate);
+    if (g >= tg * 0.9f) tg = 0;
+  } else {
+    g *= fade;
+  }
+  if (tg == 0 && g < 0.2f && rand01() < density * 0.3f * crest * lively * frameScale * (300.0f / NUM_LEDS)) {
+    tg = fminf(1.0f, 0.35f + rand01() * 0.6f * crest + (rand01() < 0.08f ? 0.4f : 0.0f));
+  }
+  return g;
+}
+
+// ---------------------------------------------------------------------
+//  THE RIVER ITSELF (shared by every animation)
+//  Right of House Mill the water always flows towards the mill (right to
+//  left). Left of it the river is tidal: towards the mill, then away,
+//  changing direction TIDE_CHANGES_PER_MIN times a minute. Everything here stays small, so it is accurate all year.
+// ---------------------------------------------------------------------
+#define FLOW        0.027f                 // river flow (fraction of the strip per second)
+#define WAVE1       0.15f                  // RIVER wave lengths (fraction of the strip)
+#define WAVE2       (0.15f * 0.37f)
+#define MILL_BLEND  0.03f                  // how softly the two sides of the mill meet
+float tidePhase = PI * 0.1f, riverClock = 0;
+float offL1 = 0, offL2 = 0, offR1 = 0, offR2 = 0;
+
+float millU() { return clamp01(HOUSE_MILL_CM / 100.0f / STRIP_LENGTH_M); }
+float tideDir() { return tanhf(6.0f * sinf(tidePhase)); }          // +1 flowing right, -1 flowing left
+float flowDirAt(float u) { return u < millU() ? tideDir() : -1.0f; }   // right of the mill: always towards it
+
+void advanceRiver(float dt) {
+  tidePhase = wrapTo(tidePhase + PI * TIDE_CHANGES_PER_MIN / 60.0f * dt, TWO_PI);
+  float v = FLOW * SPEED[0] * dt, d = tideDir();
+  riverClock = wrapTo(riverClock + dt * SPEED[0], 600.0f);
+  offL1 = wrapTo(offL1 + v * d, WAVE1);  offL2 = wrapTo(offL2 + v * d * 1.3f, WAVE2);
+  offR1 = wrapTo(offR1 - v, WAVE1);      offR2 = wrapTo(offR2 - v * 1.3f, WAVE2);   // towards the mill
+}
+
+float warpU(float u, float irr) {
+  float T = riverClock;
+  return u + irr * (0.04f * sinf(TWO_PI * (u * 1.7f + T * 19.0f / 600.0f)) + 0.025f * sinf(TWO_PI * (u * 3.9f - T * 28.0f / 600.0f) + 1.3f));
+}
+float swellAt(float u, float irr) { return 1.0f - irr * 0.45f * (0.5f + 0.5f * sinf(TWO_PI * (u * 2.3f + riverClock * 11.0f / 600.0f) + 0.7f)); }
+float riverShape(float uw, float o1, float o2) {
+  return 0.7f * (sinf(TWO_PI * (uw - o1) / WAVE1) + 1.0f) * 0.5f + 0.3f * (sinf(TWO_PI * (uw - o2) / WAVE2 + PI) + 1.0f) * 0.5f;
+}
+// Shape of the ideal river at position u: 0 = trough, 1 = crest
+float riverWaveAt(float u) {
+  float irr = RIVER_IRREGULARITY, uw = warpU(u, irr);
+  float k = smooth01((u - millU()) / MILL_BLEND + 0.5f), s = 0;   // 0 = tidal side, 1 = steady side
+  if (k < 1) s += (1.0f - k) * riverShape(uw, offL1, offL2);
+  if (k > 0) s += k * riverShape(uw, offR1, offR2);
+  return powf(s * swellAt(u, irr), 2.2f);
+}
+// Colour of the ideal river (no twinkles) at position u
+float idealWater(float u, float &r, float &g, float &b) {
+  float w = riverWaveAt(u);
+  r = mixf(RIVER_TROUGH_COLOUR.r, RIVER_CREST_COLOUR.r, w);
+  g = mixf(RIVER_TROUGH_COLOUR.g, RIVER_CREST_COLOUR.g, w);
+  b = mixf(RIVER_TROUGH_COLOUR.b, RIVER_CREST_COLOUR.b, w);
+  return w;
+}
+
+// ---------------------------------------------------------------------
+//  ANIMATIONS: each fills out[] for time t (seconds, already scaled by
+//  its SPEED). u = i / NUM_LEDS is the position from 0 (left) to 1 (right),
+//  x is the same position in metres.
+// ---------------------------------------------------------------------
+
+// 1. RIVER: the ideal river, with sun glitter on the crests
+void fxRiver(float t, float dt, CRGB* out) {
+  static float lastT = -1;
+  static float glint[NUM_LEDS], target[NUM_LEDS];
+  if (lastT < 0 || t < lastT) { for (int i = 0; i < NUM_LEDS; i++) { glint[i] = 0; target[i] = 0; } }
+  lastT = t;
+  float frameScale = dt / 0.035f, fade = powf(0.78f, frameScale * RIVER_TWINKLE_SPEED);
+  float t2 = 0.68f * 0.68f, mill = millU(), calm = fabsf(tideDir());
+  for (int i = 0; i < NUM_LEDS; i++) {
+    float u = (float)i / NUM_LEDS, r, g, b;
+    float wave = idealWater(u, r, g, b);
+    float crest = smooth01((wave - t2) / (1.0f - t2));
+    float lively = u < mill ? 0.5f + 0.5f * calm : 1.0f;      // the tidal side is calmer while it turns
+    float gl = glintStep(glint[i], target[i], crest, RIVER_TWINKLE_AMOUNT, RIVER_TWINKLE_SPEED, frameScale, fade, lively);
+    gl = fminf(1.0f, gl + crest * 0.1f * lively);
+    out[i] = CRGB(cap255(r + RIVER_TWINKLE_COLOUR.r * gl), cap255(g + RIVER_TWINKLE_COLOUR.g * gl), cap255(b + RIVER_TWINKLE_COLOUR.b * gl));
+  }
+}
+
+// 2. RIVER 2: realistic layered waves (longer waves travel faster) and a green shallows
+void fxRiver2(float t, float dt, CRGB* out) {
+  static float lastT = -1;
+  static float glint[NUM_LEDS], target[NUM_LEDS];
+  static float oL[4], oR[4];
+  const float SIZES[4] = { 1.0f, 0.57f, 0.35f, 0.22f };
+  const float AMPS[4] = { 1.0f, 0.55f, 0.3f, 0.18f };
+  const float PHASES[4] = { 0.0f, 1.7f, 4.1f, 2.6f };
+  if (lastT < 0 || t < lastT) {
+    for (int i = 0; i < NUM_LEDS; i++) { glint[i] = 0; target[i] = 0; }
+    for (int k = 0; k < 4; k++) { oL[k] = 0; oR[k] = 0; }
+  }
+  lastT = t;
+  const float L = STRIP_LENGTH_M, irr = R2_IRREGULARITY;
+  int layers = R2_LAYERS < 1 ? 1 : (R2_LAYERS > 4 ? 4 : R2_LAYERS);
+  float base = fmaxf(0.01f, R2_SPACING_CM / 100.0f / L);       // longest wave (fraction of the strip)
+  float d = tideDir(), lens[4] = { 1, 1, 1, 1 }, sumA = 0;
+  for (int k = 0; k < layers; k++) {
+    lens[k] = base * SIZES[k];
+    float c = 0.03f * sqrtf(SIZES[k]);                         // longer waves travel faster
+    oL[k] = wrapTo(oL[k] + c * d * dt, lens[k]);
+    oR[k] = wrapTo(oR[k] - c * dt, lens[k]);                    // right side: towards the mill
+    sumA += AMPS[k];
+  }
+  float sx = R2_SHALLOW_CM / 100.0f, sw = fmaxf(0.05f, R2_SHALLOW_WIDTH_CM / 100.0f);
+  float frameScale = dt / 0.035f, fade = powf(0.78f, frameScale * R2_TWINKLE_SPEED);
+  float mill = millU(), calm = fabsf(d);
+  for (int i = 0; i < NUM_LEDS; i++) {
+    float u = (float)i / NUM_LEDS, x = (i + 0.5f) / NUM_LEDS * L;
+    float uw = warpU(u, irr);
+    float kk = smooth01((u - mill) / MILL_BLEND + 0.5f);
+    float hL = 0, hR = 0;
+    for (int k = 0; k < layers; k++) {
+      if (kk < 1) hL += AMPS[k] * sinf(TWO_PI * (uw - oL[k]) / lens[k] + PHASES[k]);
+      if (kk > 0) hR += AMPS[k] * sinf(TWO_PI * (uw - oR[k]) / lens[k] + PHASES[k]);
+    }
+    float h = (hL * (1.0f - kk) + hR * kk) / sumA;
+    float env = 0.7f + 0.3f * sinf(TWO_PI * (u * 0.9f - riverClock * 7.0f / 600.0f) + 0.4f);   // slow sets of bigger waves
+    float wave = powf(clamp01((h * env + 1.0f) / 2.0f * swellAt(u, irr)), 1.8f);                 // sharper crests, broad troughs
+    float crest = smooth01((wave - 0.55f) / 0.45f);
+    float lively = u < mill ? 0.5f + 0.5f * calm : 1.0f;
+    float gl = glintStep(glint[i], target[i], crest, R2_TWINKLE_AMOUNT, R2_TWINKLE_SPEED, frameScale, fade, lively);
+    float q = (x - sx) / sw, shallow = R2_SHALLOW_AMOUNT * expf(-q * q);
+    float r  = mixf(R2_TROUGH_COLOUR.r, R2_CREST_COLOUR.r, wave);
+    float g  = mixf(R2_TROUGH_COLOUR.g, R2_CREST_COLOUR.g, wave);
+    float b  = mixf(R2_TROUGH_COLOUR.b, R2_CREST_COLOUR.b, wave);
+    r = mixf(r, R2_SHALLOW_COLOUR.r * (0.55f + 0.45f * wave), shallow);
+    g = mixf(g, R2_SHALLOW_COLOUR.g * (0.55f + 0.45f * wave), shallow);
+    b = mixf(b, R2_SHALLOW_COLOUR.b * (0.55f + 0.45f * wave), shallow);
+    out[i] = CRGB(cap255(r + R2_TWINKLE_COLOUR.r * gl), cap255(g + R2_TWINKLE_COLOUR.g * gl), cap255(b + R2_TWINKLE_COLOUR.b * gl));
+  }
+}
+
+// Flooding part: one red surge from House Mill for each flood event in the current month.
+//   Each surge rushes out to the reach on both sides of the mill, then drains away.
+//   The surges are spread evenly over the whole flooding part (D seconds).
+int floodMonth = START_MONTH;
+void fxFlooding(float t, float dt, CRGB* out, float D) {
+  const float L = STRIP_LENGTH_M, x0 = HOUSE_MILL_CM / 100.0f;
+  const int n = FLOOD_EVENTS[floodMonth];
+  const float reach = fmaxf(0.05f, FLOOD_REACH_CM / 100.0f), v = FLOOD_SPREAD_CM / 100.0f;
+  const float every = D / (n > 0 ? n : 1);                   // one flood in the middle of each equal slice of the time
+  const float rise = reach / v;                              // seconds to rush out to the reach
+  const float drain = fmaxf(0.2f, FLOOD_DRAIN_SECONDS);      // seconds each surge takes to fade away
+  const float life = rise + drain;
+  int kMax = (int)floorf(t / every - 0.5f);
+  if (kMax > n - 1) kMax = n - 1;
+  int kMin = kMax - (int)ceilf(life / every) - 1;
+  if (kMin < 0) kMin = 0;
+  for (int i = 0; i < NUM_LEDS; i++) {
+    float u = (float)i / NUM_LEDS, x = (i + 0.5f) / NUM_LEDS * L, d = fabsf(x - x0), r, g, b;
+    idealWater(u, r, g, b);
+    float m = n > 0 ? 0.1f : 0.0f;                           // a faint red tint around the mill in a flooding month
+    for (int k = kMin; k <= kMax; k++) {
+      float age = t - (k + 0.5f) * every;
+      if (age < 0 || age > life) continue;
+      float rr = fminf(reach, age * v);
+      float q = (d - rr) / 0.08f;
+      float inside = d <= rr ? 1.0f : expf(-q * q);
+      float front = expf(-q * q) * (1.0f - smooth01(age / rise)) * 0.5f;
+      float fade = age < rise ? 1.0f : 1.0f - smooth01((age - rise) / drain);
+      m = fmaxf(m, fminf(1.0f, 0.8f * inside + front) * fade);
+    }
+    m *= smooth01((reach + 0.075f - d) / 0.15f);             // nothing beyond the reach
+    out[i] = CRGB(cap255(mixf(r, FLOOD_COLOUR.r, m)), cap255(mixf(g, FLOOD_COLOUR.g, m)), cap255(mixf(b, FLOOD_COLOUR.b, m)));
+  }
+}
+
+// Sewage part: 8 pollution points discharging like ink poured into water
+//    (later, the discharges can follow real pollution data)
+#define SEWAGE_POINTS  8
+#define MAX_PLUMES     48
+const float SEWAGE_POS_CM[SEWAGE_POINTS] = { SEWAGE_P1_CM, SEWAGE_P2_CM, SEWAGE_P3_CM, SEWAGE_P4_CM,
+                                             SEWAGE_P5_CM, SEWAGE_P6_CM, SEWAGE_P7_CM, SEWAGE_P8_CM };
+const float SEWAGE_EVERY[SEWAGE_POINTS]  = { SEWAGE_E1, SEWAGE_E2, SEWAGE_E3, SEWAGE_E4,
+                                             SEWAGE_E5, SEWAGE_E6, SEWAGE_E7, SEWAGE_E8 };   // 0 = only once
+struct Plume { float x, age; bool on; };
+
+int dischargeCount(float T, float first, float every) {
+  if (T < first) return 0;
+  return every > 0 ? (int)floorf((T - first) / every) + 1 : 1;
+}
+
+void fxSewage(float t, float dt, CRGB* out) {
+  static Plume plumes[MAX_PLUMES];
+  static float lastT = -1, muck = 0;
+  const float L = STRIP_LENGTH_M;
+  float prevT = lastT;
+  if (lastT < 0 || t < lastT) {
+    for (int p = 0; p < MAX_PLUMES; p++) plumes[p].on = false;
+    muck = 0; prevT = t;
+  }
+  lastT = t;
+  // 1. discharges: each point on its own rhythm
+  int active = 0;
+  for (int p = 0; p < MAX_PLUMES; p++) if (plumes[p].on) active++;
+  for (int k = 0; k < SEWAGE_POINTS; k++) {
+    float first = 2.0f + hash01(k + 11) * 8.0f;
+    int n = dischargeCount(t, first, SEWAGE_EVERY[k]) - dischargeCount(prevT, first, SEWAGE_EVERY[k]);
+    if (n > 2) n = 2;
+    for (int j = 0; j < n; j++) {
+      if (active < MAX_PLUMES) {
+        for (int p = 0; p < MAX_PLUMES; p++) if (!plumes[p].on) {
+          plumes[p].x = SEWAGE_POS_CM[k] / 100.0f; plumes[p].age = 0; plumes[p].on = true; active++; break;
+        }
+      }
+      muck = fminf(0.75f, muck + 0.07f * SEWAGE_MUCKINESS);
+    }
+  }
+  // 2. the ink drifts with the river, spreads and fades; the muck slowly settles
+  muck *= expf(-dt / 90.0f);
+  float v = FLOW * L;
+  for (int p = 0; p < MAX_PLUMES; p++) {
+    if (!plumes[p].on) continue;
+    plumes[p].age += dt;
+    plumes[p].x += v * flowDirAt(plumes[p].x / L) * dt;
+    if (plumes[p].age >= 40.0f || plumes[p].x <= -1.0f || plumes[p].x >= L + 1.0f) plumes[p].on = false;
+  }
+  // 3. colours
+  for (int i = 0; i < NUM_LEDS; i++) {
+    float u = (float)i / NUM_LEDS, x = (i + 0.5f) / NUM_LEDS * L, r, g, b;
+    float wave = idealWater(u, r, g, b);
+    float mk = muck * (0.75f + 0.25f * sinf(TWO_PI * (x / 0.9f - riverClock * 13.0f / 600.0f)));
+    r = mixf(r, SEWAGE_MUCK_COLOUR.r, mk); g = mixf(g, SEWAGE_MUCK_COLOUR.g, mk); b = mixf(b, SEWAGE_MUCK_COLOUR.b, mk);
+    float conc = 0, cr = 0, cg = 0, cb = 0;
+    for (int p = 0; p < MAX_PLUMES; p++) {
+      if (!plumes[p].on) continue;
+      float w = 0.12f + 0.03f * plumes[p].age, q = (x - plumes[p].x) / w;
+      if (q < -3 || q > 3) continue;
+      float c = 1.8f * powf(0.12f / w, 0.7f) * expf(-plumes[p].age / 25.0f) * expf(-q * q) * (0.75f + 0.25f * wave);
+      float k = smooth01(plumes[p].age / 12.0f);               // fresh ink turns murky as it spreads
+      conc += c;
+      cr += c * mixf(SEWAGE_INK_COLOUR.r, SEWAGE_MUCK_COLOUR.r, k);
+      cg += c * mixf(SEWAGE_INK_COLOUR.g, SEWAGE_MUCK_COLOUR.g, k);
+      cb += c * mixf(SEWAGE_INK_COLOUR.b, SEWAGE_MUCK_COLOUR.b, k);
+    }
+    if (conc > 0) {
+      float a = fminf(1.0f, conc);
+      r = mixf(r, cr / conc, a); g = mixf(g, cg / conc, a); b = mixf(b, cb / conc, a);
+    }
+    out[i] = CRGB(cap255(r), cap255(g), cap255(b));
+  }
+}
+
+// 3. FLOODING & SEWAGE: each part has its own start and end time within the animation.
+//    Where they overlap, the flooding fades out while the sewage builds up.
+float partWindow(float t, float a, float b, float fadeIn, float fadeOut) {
+  if (t < a || t > b) return 0;
+  fadeIn = fminf(fadeIn, (b - a) * 0.5f); fadeOut = fminf(fadeOut, (b - a) * 0.5f);
+  return (fadeIn > 0 ? smooth01((t - a) / fadeIn) : 1.0f) * (fadeOut > 0 ? 1.0f - smooth01((t - (b - fadeOut)) / fadeOut) : 1.0f);
+}
+CRGB fsFlood[NUM_LEDS], fsSewage[NUM_LEDS];
+void fxFloodSewage(float t, float dt, CRGB* out) {
+  static float lastT = -1;
+  if (lastT >= 0 && t < lastT - 0.5f) floodMonth = (floodMonth + 1) % 12;   // each time round: the next month
+  lastT = t;
+  float len = FS_SECONDS;
+  float fS = fminf(FLOOD_START, len - 1.0f), fE = fminf(fmaxf(FLOOD_END, fS + 1.0f), len);
+  float sS = fminf(SEWAGE_START, len - 1.0f), sE = fminf(fmaxf(SEWAGE_END, sS + 1.0f), len);
+  float ov = fmaxf(0.0f, fminf(fE, sE) - fmaxf(fS, sS));          // how long the two overlap
+  float kf = partWindow(t, fS, fE, fS > 0 ? 3.0f : 0.0f, fE >= len ? 0.0f : 3.0f);   // full strength until just before it ends
+  float ks = partWindow(t, sS, sE, sS > 0 ? fmaxf(3.0f, ov * 0.6f) : 0.0f, sE >= len ? 0.0f : 3.0f);
+  if (kf > 0) fxFlooding(t - fS, dt, fsFlood, fE - fS);    // floods spread over the whole flooding time
+  if (ks > 0) fxSewage(t - sS, dt, fsSewage);
+  for (int i = 0; i < NUM_LEDS; i++) {
+    float r, g, b;
+    idealWater((float)i / NUM_LEDS, r, g, b);
+    float R = r, G = g, B = b;
+    if (kf > 0) { R += (fsFlood[i].r - r) * kf; G += (fsFlood[i].g - g) * kf; B += (fsFlood[i].b - b) * kf; }
+    if (ks > 0) { R += (fsSewage[i].r - r) * ks; G += (fsSewage[i].g - g) * ks; B += (fsSewage[i].b - b) * ks; }
+    out[i] = CRGB(cap255(R), cap255(G), cap255(B));
+  }
+}
+
+// 4. REWILDING: green appears just after House Mill, clean waves arrive from both ends, back to RIVER
+void fxRewilding(float t, float dt, CRGB* out) {
+  const float L = STRIP_LENGTH_M, mill = millU() * L;
+  float prog = smooth01((t - 3.0f) / 42.0f);               // the clean waves take about 42 s to reach the mill
+  float fl = mill * prog, fr = L - (L - mill) * prog;       // where the two clean fronts are (m)
+  float allClean = smooth01((t - 45.0f) / 8.0f);
+  float glowOn = prog > 0 ? 1.0f - smooth01((t - 45.0f) / 5.0f) : 0.0f;
+  float back = 1.0f - smooth01((t - 40.0f) / 15.0f);       // plants fade as the river returns to normal
+  int n = REWILD_PLANTS < 60 ? REWILD_PLANTS : 60;
+  float pos[60], rad[60], bright[60];
+  int count = 0;
+  for (int k = 0; k < n; k++) {
+    float age = t - (4.0f + hash01(k + 61) * 20.0f);        // planted between 4 s and 24 s
+    if (age < 0) continue;
+    float grow = smooth01(age / 10.0f);
+    pos[count] = mill + hash01(k + 81) * REWILD_AREA_CM / 100.0f;
+    rad[count] = 0.03f + grow * REWILD_SIZE_CM / 100.0f;
+    bright[count] = (0.35f + 0.65f * grow) * (0.85f + 0.15f * sinf(t * 1.3f + k));
+    count++;
+  }
+  for (int i = 0; i < NUM_LEDS; i++) {
+    float u = (float)i / NUM_LEDS, x = (i + 0.5f) / NUM_LEDS * L, r, g, b;
+    idealWater(u, r, g, b);
+    float clean = x < mill ? smooth01((fl - x) / 0.6f + 0.5f) : smooth01((x - fr) / 0.6f + 0.5f);
+    clean = fmaxf(clean, allClean);
+    float dirt = REWILD_START_POLLUTION * (1.0f - clean) * (0.8f + 0.2f * sinf(TWO_PI * (x / 0.9f - riverClock * 13.0f / 600.0f)));
+    r = mixf(r, SEWAGE_MUCK_COLOUR.r, dirt); g = mixf(g, SEWAGE_MUCK_COLOUR.g, dirt); b = mixf(b, SEWAGE_MUCK_COLOUR.b, dirt);
+    float qf = x < mill ? (x - fl) / 0.3f : (x - fr) / 0.3f;  // the arriving clean waves glow a little
+    float glow = 0.5f * glowOn * expf(-qf * qf);
+    r = mixf(r, RIVER_CREST_COLOUR.r, glow); g = mixf(g, RIVER_CREST_COLOUR.g, glow); b = mixf(b, RIVER_CREST_COLOUR.b, glow);
+    float m = 0;
+    for (int k = 0; k < count; k++) {
+      float q = (x - pos[k]) / rad[k];
+      if (q > -3 && q < 3) m = fmaxf(m, bright[k] * expf(-q * q));
+    }
+    m *= back;
+    out[i] = CRGB(cap255(mixf(r, REWILD_COLOUR.r, m)), cap255(mixf(g, REWILD_COLOUR.g, m)), cap255(mixf(b, REWILD_COLOUR.b, m)));
+  }
+}
+
+typedef void (*EffectFn)(float t, float dt, CRGB* out);
+EffectFn EFFECTS[NUM_ANIMS] = { fxRiver, fxRiver2, fxFloodSewage, fxRewilding };
+
+// ---------------------------------------------------------------------
+//  TRANSITIONS
+// ---------------------------------------------------------------------
+#define WIPE_EDGE  0.08f     // softness of the moving edge in left/right transitions
+
+float wipeMix(float p, float u) {
+  float front = p * (1.0f + 2.0f * WIPE_EDGE) - WIPE_EDGE;
+  return smooth01((front - u) / WIPE_EDGE + 1.0f);
+}
+
+// Mix one LED of the old (a) and new (b) animation at progress p (0-1)
+CRGB transitionPixel(uint8_t type, float p, int i, CRGB a, CRGB b) {
+  if (type == T_OVERLAY) {                        // new one on top, old one fades underneath
+    a.nscale8((uint8_t)((1.0f - smooth01((p - 0.4f) / 0.6f)) * 255.0f));
+    b.nscale8((uint8_t)(smooth01(p / 0.6f) * 255.0f));
+    return a | b;                                 // brighter of the two, colour by colour
+  }
+  float u = (float)i / NUM_LEDS;
+  float m = (type == T_WIPE_LR) ? wipeMix(p, u) : (type == T_WIPE_RL) ? wipeMix(p, 1.0f - u) : smooth01(p);
+  return blend(a, b, (uint8_t)(m * 255.0f));
+}
+
+// Run one animation with its SPEED and LIGHT settings
+void renderAnim(int id, float localT, float dt, CRGB* out) {
+  EFFECTS[id](localT * SPEED[id], dt * SPEED[id], out);
+  uint8_t scale = (uint8_t)(LIGHT[id] * 255.0f + 0.5f);
+  for (int i = 0; i < NUM_LEDS; i++) out[i].nscale8(scale);
+}
+
+// ---------------------------------------------------------------------
+//  SETUP & LOOP
+// ---------------------------------------------------------------------
+float seqTime = 0;
+unsigned long lastMs = 0;
+
+void setup() {
+${setupHw}
+
+#if ${WDT}
+  // If this part will not compile on your board package, delete it (down to #endif)
+  #if ESP_ARDUINO_VERSION_MAJOR >= 3
+    esp_task_wdt_config_t wdtConfig = { 8000, 0, true };
+    esp_task_wdt_reconfigure(&wdtConfig);
+  #else
+    esp_task_wdt_init(8, true);
+  #endif
+  esp_task_wdt_add(NULL);
+#endif
+
+  lastMs = millis();
+}
+
+void loop() {
+  // Time since the last frame (works across the millis() rollover)
+  unsigned long now = millis();
+  float dt = (now - lastMs) / 1000.0f;
+  lastMs = now;
+  if (dt > 0.5f) dt = 0.5f;                       // only cap very long pauses, so slow frames don't slow the animation
+
+  advanceRiver(dt);                               // the shared river keeps flowing
+
+  // Position in the looping sequence (kept small, so it is accurate all year)
+  float CYCLE = 0;
+  for (int k = 0; k < NUM_ANIMS; k++) CYCLE += ANIM_SECONDS[PLAY_ORDER[k]];
+  seqTime += dt;
+  while (seqTime >= CYCLE) seqTime -= CYCLE;
+  int pos = 0;
+  float start = 0;
+  while (pos < NUM_ANIMS - 1 && seqTime >= start + ANIM_SECONDS[PLAY_ORDER[pos]]) { start += ANIM_SECONDS[PLAY_ORDER[pos]]; pos++; }
+  float local = seqTime - start;
+
+  int cur = PLAY_ORDER[pos];
+  float dur = ANIM_SECONDS[cur];
+  int nxt = PLAY_ORDER[(pos + 1) % NUM_ANIMS];
+  float inLen = TRANS_SECONDS[(pos + NUM_ANIMS - 1) % NUM_ANIMS];   // the transition that brought this one in
+  float len = TRANS_SECONDS[pos];                                   // the transition out of this one
+  renderAnim(cur, local + inLen, dt, bufA);
+
+  if (local >= dur - len) {                                        // transition into the next animation
+    float nt = local - (dur - len);
+    renderAnim(nxt, nt, dt, bufB);
+    float p = nt / len;
+    for (int i = 0; i < NUM_LEDS; i++) leds[i] = transitionPixel(TRANS_TYPE[pos], p, i, bufA[i], bufB[i]);
+  } else {
+    for (int i = 0; i < NUM_LEDS; i++) leds[i] = bufA[i];
+  }
+
+#if ${WDT}
+  esp_task_wdt_reset();                           // tell the watchdog we are still running
+#endif
+
+${showBlock}
+  delay(5);
+}
+`;
+}
+
+let codeText = '';
+function updateCode(changed) {
+  codeText = genCode();
+  rememberLatest();
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let inSettings = false;
+  const lines = codeText.split('\n').map(line => {
+    if (line.startsWith('// ===== SETTINGS FROM THE SIMULATOR')) inSettings = true;
+    else if (line.startsWith('// =======================================')) inSettings = false;
+    const e = esc(line);
+    if (!inSettings || !line.startsWith('const ')) return e;
+    const key = (line.match(/^const\s+\w+\s+(\w+)/) || [])[1];
+    const flash = changed && changed.includes(key) ? ' flash' : '';
+    return '<span class="hl' + flash + '">' + e + '</span>';
+  });
+  document.getElementById('code').innerHTML = lines.join('\n');
+  if (changed) {
+    // scroll the code panel so the changed line is in view, then let the highlight fade
+    const first = document.querySelector('.hl.flash');
+    const pre = document.querySelector('pre');
+    if (first && pre) {
+      const top = first.offsetTop - pre.offsetTop;
+      if (top < pre.scrollTop + 20 || top > pre.scrollTop + pre.clientHeight - 40) pre.scrollTop = Math.max(0, top - 60);
+    }
+    setTimeout(() => document.querySelectorAll('.hl.flash').forEach(el => el.classList.remove('flash')), 60);
+  }
+  document.getElementById('codeTitle').innerHTML = 'installation.ino<span class="code-hw">for ' + HARDWARE[hwKey].label + '</span>';
+}
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const blob = new Blob([codeText], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'installation.ino';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById('copyBtn').addEventListener('click', e => {
+  navigator.clipboard.writeText(codeText).then(() => {
+    e.target.textContent = 'Copied';
+    setTimeout(() => (e.target.textContent = 'Copy'), 1500);
+  });
+});
+
+// =====================================================================
+//  TOP CONTROLS
+// =====================================================================
+document.querySelectorAll('#hwSeg button').forEach(b => b.addEventListener('click', () => {
+  hwKey = b.dataset.hw;
+  document.querySelectorAll('#hwSeg button').forEach(x => x.classList.toggle('on', x === b));
+  N = HARDWARE[hwKey].leds;
+  effects = ANIMS.map(a => a.make());
+  makeBuffers(); sizeCanvas(); updateCode();
+}));
+
+const millInput = document.getElementById('millInput');
+const tideInput = document.getElementById('tideInput');
+const brightInput = document.getElementById('brightInput');
+brightInput.addEventListener('input', e => {
+  const v = parseInt(e.target.value, 10);
+  if (v >= 1) { piece.brightness = Math.min(255, v); updateCode(['BRIGHTNESS']); }
+});
+
+// Keep every position (House Mill, pollution points, shallows...) on the strip
+function clampPositions() {
+  const maxCm = Math.round(stripLength * 100);
+  piece.millCm = Math.min(piece.millCm, maxCm);
+  millInput.value = piece.millCm;
+  ANIMS.forEach((a, id) => a.extras.forEach(x => {
+    if (typeof x.max === 'function') settings[id][x.key] = Math.min(settings[id][x.key], maxCm);
+  }));
+}
+
+document.getElementById('lengthInput').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  if (v > 0) {
+    stripLength = v;
+    clampPositions();
+    buildRuler(); renderSettings(); updateCode(['STRIP_LENGTH_M', 'HOUSE_MILL_CM']);
+  }
+});
+// House Mill and the tide can be changed at the top or in any animation's settings
+function setMill(v) {
+  piece.millCm = Math.max(0, Math.min(v, Math.round(stripLength * 100)));
+  millInput.value = piece.millCm;
+  buildRuler(); updateCode(['HOUSE_MILL_CM']);
+}
+function setTide(v) {
+  piece.tideChanges = Math.max(0, Math.min(30, v));
+  tideInput.value = piece.tideChanges;
+  updateCode(['TIDE_CHANGES_PER_MIN']);
+}
+function syncSettingsSliders() {
+  const ms = document.getElementById('millSlider'), ts = document.getElementById('tideSlider');
+  if (ms) { ms.value = piece.millCm; document.getElementById('millVal').textContent = piece.millCm + ' cm'; }
+  if (ts) { ts.value = piece.tideChanges; document.getElementById('tideVal').textContent = piece.tideChanges + ' per min'; }
+}
+millInput.addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  if (v >= 0) { setMill(v); syncSettingsSliders(); }
+});
+tideInput.addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  if (v >= 0) { setTide(v); syncSettingsSliders(); }
+});
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('#modeSeg button').forEach(x => x.classList.toggle('on', x.dataset.mode === m));
+  if (m === 'single') singleTime = 0;
+}
+document.querySelectorAll('#modeSeg button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+const playBtn = document.getElementById('playBtn');
+const ICON_PAUSE = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="3.5" height="12" rx="0.5"/><rect x="9.5" y="2" width="3.5" height="12" rx="0.5"/></svg>';
+const ICON_PLAY = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.2v11.6c0 .5.5.8.9.5l9-5.8c.4-.3.4-.8 0-1L4.9 1.7c-.4-.3-.9 0-.9.5z"/></svg>';
+// Show a pause symbol while playing, and a play symbol while paused
+function updatePlayButton() {
+  playBtn.innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+  playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+  playBtn.title = playing ? 'Pause' : 'Play';
+}
+playBtn.addEventListener('click', () => {
+  playing = !playing;
+  updatePlayButton();
+});
+document.getElementById('restartBtn').addEventListener('click', () => {
+  seqTime = 0; singleTime = 0;
+  resetRiver();
+  effects = ANIMS.map(a => a.make());
+});
+document.getElementById('nextBtn').addEventListener('click', () => {
+  if (mode === 'single') setMode('sequence');
+  const { pos } = currentPosition();
+  seqTime = startOf((pos + 1) % order.length);
+});
+
+// =====================================================================
+//  MAIN LOOP
+// =====================================================================
+const statusEl = document.getElementById('status');
+let lastPlayingId = -1;
+
+function frame(ts) {
+  if (!lastFrame) lastFrame = ts;
+  const dt = Math.min(0.1, (ts - lastFrame) / 1000);
+  lastFrame = ts;
+  if (playing) step(dt);
+  draw();
+
+  // status + progress bars
+  if (mode === 'single') {
+    statusEl.innerHTML = '<span class="st-name">' + ANIMS[selected].name + '</span><span class="st-trans">playing on its own' + (selected === 2 ? ' \u00b7 ' + fsStatus : '') + '</span>';
+    if (lastPlayingId !== -2) { document.querySelectorAll('.anim-row').forEach(r => r.classList.remove('playing')); lastPlayingId = -2; }
+  } else {
+    const { pos, local, dur } = currentPosition();
+    const id = order[pos];
+    const inTransition = local >= dur - transLen(pos);
+    statusEl.innerHTML = '<span class="st-name">' + (pos + 1) + '. ' + ANIMS[id].name + '</span>' +
+      '<span class="st-time">' + fmtTime(local) + ' of ' + fmtTime(dur) + '</span>' +
+      '<span class="st-loop">loop ' + fmtTime(seqTime) + ' of ' + fmtTime(cycleSeconds()) + '</span>' +
+      '<span class="st-trans">' + (inTransition ? TRANSITION_TYPES[transitions[pos].type].name + ' into ' + ANIMS[order[(pos + 1) % order.length]].name : id === 2 ? fsStatus : '') + '</span>';
+    document.querySelectorAll('.trans-row').forEach(r => r.classList.toggle('active', inTransition && r.id === 'trans-' + pos));
+    if (id !== lastPlayingId) {
+      document.querySelectorAll('.anim-row').forEach(r => r.classList.toggle('playing', parseInt(r.dataset.id, 10) === id));
+      document.querySelectorAll('.prog-fill').forEach(p => (p.style.width = '0%'));
+      lastPlayingId = id;
+    }
+    const bar = document.getElementById('prog-' + id);
+    if (bar) bar.style.width = (local / dur * 100) + '%';
+  }
+  requestAnimationFrame(frame);
+}
+
+// =====================================================================
+//  VERSIONS: save, load, delete, export and import named settings
+//  Stored in this browser (localStorage). Export makes a file you can share.
+// =====================================================================
+const STORE_VERSIONS = 'manifold-versions';
+const STORE_LATEST = 'manifold-latest';
+const versionMsg = document.getElementById('versionMsg');
+const versionList = document.getElementById('versionList');
+const versionName = document.getElementById('versionName');
+
+// Everything that makes up a version
+function currentState() {
+  return {
+    settings: JSON.parse(JSON.stringify(settings)),
+    order: order.slice(),
+    transitions: transitions.map(t => ({ type: t.type, len: t.len })),
+    stripLength: stripLength,
+    piece: { millCm: piece.millCm, tideChanges: piece.tideChanges, month: piece.month, floodCounts: piece.floodCounts.slice(), months: MONTH_SET, brightness: piece.brightness },
+    hwKey: hwKey
+  };
+}
+
+// Put a saved version back, keeping sensible defaults for anything missing
+function applyState(data) {
+  if (!data || typeof data !== 'object') return false;
+  let saved = Array.isArray(data.settings) ? data.settings : [];
+  if (saved.length === 5) {        // older version: FLOODING and SEWAGE were separate, so merge them
+    const fl = Object.assign({}, saved[2] || {}); delete fl.origin;
+    saved = [saved[0], saved[1], Object.assign({}, saved[3] || {}, fl), saved[4]];
+  }
+  settings = ANIMS.map((a, id) => Object.assign(defaultSettings(id), saved[id] || {}));
+  const ok = Array.isArray(data.order) && data.order.length === ANIMS.length &&
+             data.order.slice().sort().every((v, k) => v === k);
+  order = ok ? data.order.slice() : ANIMS.map((_, k) => k);
+  if (Array.isArray(data.transitions) && data.transitions.length === ANIMS.length) {
+    transitions = data.transitions.map(t => ({
+      type: TRANSITION_TYPES.some(x => x.id === t.type) ? t.type : 0,
+      len: TRANSITION_LENGTHS.includes(t.len) ? t.len : 5
+    }));
+  }
+  if (data.stripLength > 0) stripLength = data.stripLength;
+  piece = Object.assign(defaultPiece(), data.piece || {});
+  if (piece.months !== MONTH_SET || !Array.isArray(piece.floodCounts) || piece.floodCounts.length !== 12) {
+    piece.floodCounts = FLOOD_DATA.slice(); piece.month = 0; piece.months = MONTH_SET;   // older Oct 2023-Sep 2024 data: start again from January 2025
+  }
+  piece.month = Math.max(0, Math.min(11, Math.round(piece.month) || 0));
+  tideInput.value = piece.tideChanges;
+  piece.brightness = Math.max(1, Math.min(255, Math.round(piece.brightness) || 70));
+  brightInput.value = piece.brightness;
+  clampPositions();
+  if (HARDWARE[data.hwKey]) hwKey = data.hwKey;
+  N = HARDWARE[hwKey].leds;
+  document.getElementById('lengthInput').value = stripLength;
+  document.querySelectorAll('#hwSeg button').forEach(x => x.classList.toggle('on', x.dataset.hw === hwKey));
+  effects = ANIMS.map(a => a.make());
+  makeBuffers(); sizeCanvas(); buildRuler(); renderList(); renderSettings(); updateCode();
+  return true;
+}
+
+function readVersions() {
+  try { return JSON.parse(localStorage.getItem(STORE_VERSIONS)) || []; } catch (e) { return []; }
+}
+function writeVersions(list) {
+  try { localStorage.setItem(STORE_VERSIONS, JSON.stringify(list)); return true; }
+  catch (e) { showMsg('Couldn\u2019t save in this browser. Use Export file instead.'); return false; }
+}
+function rememberLatest() {
+  try { localStorage.setItem(STORE_LATEST, JSON.stringify(currentState())); } catch (e) { /* not available: ignore */ }
+}
+
+let msgTimer = null;
+function showMsg(text) {
+  versionMsg.textContent = text;
+  clearTimeout(msgTimer);
+  msgTimer = setTimeout(() => (versionMsg.textContent = ''), 4000);
+}
+
+function refreshVersionList(selectName) {
+  const list = readVersions();
+  versionList.innerHTML = list.length
+    ? list.map(v => '<option value="' + encodeURIComponent(v.name) + '">' + v.name.replace(/</g, '&lt;') + '</option>').join('')
+    : '<option value="">No saved versions yet</option>';
+  if (selectName) versionList.value = encodeURIComponent(selectName);
+}
+const selectedVersionName = () => decodeURIComponent(versionList.value || '');
+
+document.getElementById('saveVersion').addEventListener('click', () => {
+  const name = versionName.value.trim();
+  if (!name) { showMsg('Type a name first'); versionName.focus(); return; }
+  const list = readVersions();
+  const existing = list.findIndex(v => v.name === name);
+  const entry = { name, saved: new Date().toISOString(), data: currentState() };
+  if (existing >= 0) list[existing] = entry; else list.push(entry);
+  if (writeVersions(list)) {
+    refreshVersionList(name);
+    showMsg(existing >= 0 ? 'Updated \u201c' + name + '\u201d' : 'Saved \u201c' + name + '\u201d');
+  }
+});
+
+document.getElementById('loadVersion').addEventListener('click', () => {
+  const name = selectedVersionName();
+  const v = readVersions().find(x => x.name === name);
+  if (!v) { showMsg('Choose a saved version first'); return; }
+  applyState(v.data);
+  versionName.value = v.name;
+  showMsg('Loaded \u201c' + v.name + '\u201d');
+});
+
+document.getElementById('deleteVersion').addEventListener('click', () => {
+  const name = selectedVersionName();
+  if (!name) { showMsg('Choose a saved version first'); return; }
+  if (!confirm('Delete the version \u201c' + name + '\u201d?')) return;
+  if (writeVersions(readVersions().filter(x => x.name !== name))) {
+    refreshVersionList();
+    showMsg('Deleted \u201c' + name + '\u201d');
+  }
+});
+
+document.getElementById('exportVersion').addEventListener('click', () => {
+  const name = versionName.value.trim() || selectedVersionName() || 'manifold-settings';
+  const file = { name, saved: new Date().toISOString(), data: currentState() };
+  const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name.replace(/[^a-z0-9-_ ]/gi, '').trim().replace(/\s+/g, '-') + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+  showMsg('Exported \u201c' + name + '\u201d');
+});
+
+const importFile = document.getElementById('importFile');
+document.getElementById('importVersion').addEventListener('click', () => importFile.click());
+importFile.addEventListener('change', () => {
+  const f = importFile.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const file = JSON.parse(reader.result);
+      const data = file.data || file;
+      if (!applyState(data)) throw new Error('bad file');
+      const name = (file.name || f.name.replace(/\.json$/i, '')).toString();
+      const list = readVersions().filter(x => x.name !== name);
+      list.push({ name, saved: new Date().toISOString(), data: currentState() });
+      writeVersions(list);
+      refreshVersionList(name);
+      versionName.value = name;
+      showMsg('Imported \u201c' + name + '\u201d');
+    } catch (e) {
+      showMsg('That file isn\u2019t a Manifold settings file');
+    }
+    importFile.value = '';
+  };
+  reader.readAsText(f);
+});
+
+// =====================================================================
+//  START
+// =====================================================================
+window.addEventListener('resize', sizeCanvas);
+const stickyStrip = document.querySelector('.sticky-strip');
+window.addEventListener('scroll', () => stickyStrip.classList.toggle('stuck', stickyStrip.getBoundingClientRect().top <= 0 && window.scrollY > 0), { passive: true });
+refreshVersionList();
+let restored = false;
+try {
+  const latest = JSON.parse(localStorage.getItem(STORE_LATEST));
+  if (latest) restored = applyState(latest);
+} catch (e) { /* nothing remembered yet */ }
+if (!restored) { sizeCanvas(); buildRuler(); renderList(); renderSettings(); updateCode(); }
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
